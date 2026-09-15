@@ -21,12 +21,13 @@ import {
   HelpCircle 
 } from 'lucide-react';
 import BulkAddCategoryModal from './BulkAddCategoryModal';
+import { seedDefaultCategoriesIfEmpty } from '../lib/defaultCategories';
 
 type CategoryType = 'EXPENSE' | 'INCOME' | 'INVENTORY';
 
 export default function CategoryManagement() {
   const { language, farmId, user } = useAppStore();
-  const effectiveFarmId = farmId || user?.farmId;
+  const effectiveFarmId = farmId || user?.farmId || 'farm-1';
   const t = translations[language];
 
   // Active Tab state: EXPENSE | INCOME | INVENTORY
@@ -58,6 +59,9 @@ export default function CategoryManagement() {
       setIsLoading(false);
       return;
     }
+
+    // Auto-seed standard agricultural farm categories if none exist
+    seedDefaultCategoriesIfEmpty(effectiveFarmId).catch(() => {});
 
     setIsLoading(true);
     const unsubCats = onSnapshot(

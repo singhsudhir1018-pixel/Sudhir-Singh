@@ -367,7 +367,12 @@ export default function Transactions() {
                     <label className="block text-sm font-medium text-stone-700 mb-1">{t.type}</label>
                     <select 
                       value={formData.type}
-                      onChange={e => setFormData({...formData, type: e.target.value as 'INCOME'|'EXPENSE'})}
+                      onChange={e => setFormData({
+                        ...formData, 
+                        type: e.target.value as 'INCOME'|'EXPENSE',
+                        category: '',
+                        subCategory: ''
+                      })}
                       className="w-full px-4 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500"
                     >
                       <option value="EXPENSE">{t.expense}</option>
