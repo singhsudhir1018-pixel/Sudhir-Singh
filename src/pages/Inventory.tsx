@@ -121,6 +121,7 @@ export default function Inventory() {
         <table className="w-full text-left border-collapse min-w-[800px]">
           <thead>
             <tr className="bg-stone-50 border-b border-stone-200 text-stone-500 font-medium text-sm">
+              <th className="p-4 w-16">{t.sn}</th>
               <th className="p-4">{t.itemName}</th>
               <th className="p-4">{t.category}</th>
               <th className="p-4 text-right">{t.currentStock}</th>
@@ -130,10 +131,11 @@ export default function Inventory() {
             </tr>
           </thead>
           <tbody>
-            {inventory.map(item => {
+            {inventory.map((item, index) => {
               const isLowStock = item.currentStock < item.minThreshold;
               return (
                 <tr key={item.id} className={`border-b border-stone-100 hover:bg-stone-50 ${isLowStock ? 'bg-red-50/20' : ''}`}>
+                  <td className="p-4 text-stone-600">{index + 1}</td>
                   <td className="p-4 font-medium text-stone-800">
                     <div>{item.itemName}</div>
                     {item.expiryDateBS && <div className="text-xs text-stone-500 font-normal">Exp: {item.expiryDateBS}</div>}
@@ -204,8 +206,8 @@ export default function Inventory() {
                   type="INVENTORY"
                   selectedCategoryName={formData.category}
                   selectedSubCategoryName={formData.subCategory}
-                  onCategoryChange={(val) => setFormData({...formData, category: val})}
-                  onSubCategoryChange={(val) => setFormData({...formData, subCategory: val})}
+                  onCategoryChange={(val) => setFormData(prev => ({...prev, category: val}))}
+                  onSubCategoryChange={(val) => setFormData(prev => ({...prev, subCategory: val}))}
                   required
                 />
 

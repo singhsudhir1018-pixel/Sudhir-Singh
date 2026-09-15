@@ -1,0 +1,15 @@
+--- src/lib/firebase.ts
++++ src/lib/firebase.ts
+@@ -2,6 +2,7 @@
+ import { getAuth } from 'firebase/auth';
+ import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
++import { getStorage } from 'firebase/storage';
+ 
+ const firebaseConfig = {
+   apiKey: "AIzaSyBwj4eeEZ4mG7uBJ162UchkUc9HAvQOTrI",
+@@ -19,4 +20,5 @@
+ 
+ export const auth = getAuth(app);
++export const storage = getStorage(app);
+ export const db = initializeFirestore(app, { 
+    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),

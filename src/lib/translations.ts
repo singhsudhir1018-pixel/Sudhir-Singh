@@ -1,6 +1,9 @@
 export const translations: Record<string, Record<string, string>> = {
   en: {
     appTitle: 'AgriFarm Management',
+    sn: 'S.N.',
+    searchCategory: 'Search Category...',
+    searchSubCategory: 'Search Sub-category...',
     dashboard: 'Dashboard',
     transactions: 'Transactions',
     inventory: 'Inventory',

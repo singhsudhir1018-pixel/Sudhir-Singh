@@ -50,6 +50,9 @@ export interface Party {
   type: 'BUYER' | 'SUPPLIER';
   phone: string;
   address?: string;
+  email?: string;
+  photoUrl?: string;
+  address?: string;
   panVat?: string;
   pendingBalance: number;
 }
@@ -61,6 +64,9 @@ export interface Partner {
   investmentAmount: number;
   profitSharePercentage: number;
   phone: string;
+  address?: string;
+  email?: string;
+  photoUrl?: string;
   joiningDateBS: string;
   dividendPayable: number;
 }
@@ -88,6 +94,7 @@ export interface Lease {
   endDateBS: string;
   totalAmount: number;
   paidAmount: number;
+  documentUrl?: string;
 }
 
 export interface Employee {
@@ -153,6 +160,9 @@ export interface GeneralSettings {
   panNumber: string;
   email: string;
   phone: string;
+  address?: string;
+  email?: string;
+  photoUrl?: string;
   regNumber: string;
   currencyFormat: 'SOUTH_ASIAN' | 'INTERNATIONAL';
   currencySymbol: string;
@@ -165,6 +175,9 @@ export interface FarmProfileSettings {
   panNumber: string;
   email: string;
   phone: string;
+  address?: string;
+  email?: string;
+  photoUrl?: string;
   regNumber: string;
   currencyFormat: 'SOUTH_ASIAN' | 'INTERNATIONAL';
   currencySymbol: string;

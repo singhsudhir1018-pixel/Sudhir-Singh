@@ -1,0 +1,82 @@
+--- src/pages/Finance.tsx
++++ src/pages/Finance.tsx
+@@ -4,7 +4,7 @@
+ import { collection, onSnapshot, query, where, orderBy, doc, deleteDoc, getDoc, runTransaction } from 'firebase/firestore';
+ import { db } from '../lib/firebase';
+ import { Transaction, Partner, Party, BankAccount } from '../types';
+-import { PieChart, TrendingUp, TrendingDown, DollarSign, Download, Printer } from 'lucide-react';
++import { PieChart, TrendingUp, TrendingDown, DollarSign, Download, Printer, Eye, Edit2, Trash2 } from 'lucide-react';
+ import { translations } from '../lib/translations';
++import { useNavigate } from 'react-router-dom';
+ 
+ export default function Finance() {
+   const { farmId, language } = useAppStore();
+   const t = translations[language];
++  const navigate = useNavigate();
+ 
+   const [transactions, setTransactions] = useState<Transaction[]>([]);
+@@ -62,6 +63,45 @@
+     a.click();
+   };
+ 
++  const handleEdit = (tx: Transaction) => {
++    // Open edit transaction logic. It would normally open a modal or navigate to a specialized route.
++    // We'll dispatch an event or navigate
++    navigate('/transactions', { state: { editTransaction: tx } });
++  };
++
++  const handleDelete = async (tx: Transaction) => {
++    if (!window.confirm("Are you sure you want to delete this transaction? This will automatically reverse the linked bank/cash account balance.")) return;
++    
++    try {
++      await runTransaction(db, async (transaction) => {
++        const txRef = doc(db, 'transactions', tx.id);
++        const txDoc = await transaction.get(txRef);
++        if (!txDoc.exists()) throw "Transaction does not exist!";
++
++        if (tx.accountId) {
++          const accountRef = doc(db, 'bankAccounts', tx.accountId);
++          const accountDoc = await transaction.get(accountRef);
++          if (accountDoc.exists()) {
++            const accData = accountDoc.data();
++            let newBalance = accData.balance;
++            
++            // Reverse the impact
++            if (tx.type === 'INCOME') newBalance -= tx.amount;
++            else if (tx.type === 'EXPENSE') newBalance += tx.amount;
++
++            transaction.update(accountRef, { balance: newBalance });
++          }
++        }
++        
++        transaction.delete(txRef);
++      });
++      alert('Transaction deleted successfully and balance updated.');
++    } catch (err) {
++      console.error("Delete failed: ", err);
++      alert('Failed to delete transaction.');
++    }
++  };
++
+   const handlePrint = () => {
+     window.print();
+   };
+@@ -155,7 +195,17 @@
+                         Rs. {tx.amount.toLocaleString()}
+                       </td>
+                       <td className="p-4 text-center print:hidden">
+-                        <span className="text-stone-300">-</span>
++                        <div className="flex justify-center items-center space-x-2">
++                          <button className="text-stone-400 hover:text-emerald-600 p-1.5 rounded-lg hover:bg-emerald-50 transition-colors" title="Preview Receipt">
++                            <Eye size={16} />
++                          </button>
++                          <button onClick={() => handleEdit(tx)} className="text-stone-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-blue-50 transition-colors" title="Edit">
++                            <Edit2 size={16} />
++                          </button>
++                          <button onClick={() => handleDelete(tx)} className="text-stone-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition-colors" title="Delete">
++                            <Trash2 size={16} />
++                          </button>
++                        </div>
+                       </td>
+                     </tr>
+                    );

@@ -1,118 +1,99 @@
 import React, { useState, useEffect } from 'react';
+import { useAppStore } from '../store';
 import { Partner, PartnerContribution } from '../types';
-import { X, FileText, Download, Loader2 } from 'lucide-react';
+import { translations } from '../lib/translations';
 import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { useAppStore } from '../store';
-import { translations } from '../lib/translations';
+import { X, FileText } from 'lucide-react';
 
-interface PartnerLedgerModalProps {
+interface Props {
   partner: Partner;
   isOpen: boolean;
   onClose: () => void;
 }
 
-export default function PartnerLedgerModal({ partner, isOpen, onClose }: PartnerLedgerModalProps) {
-  const { language, farmId } = useAppStore();
+export default function PartnerLedgerModal({ partner, isOpen, onClose }: Props) {
+  const { farmId, language } = useAppStore();
   const t = translations[language];
+
   const [contributions, setContributions] = useState<PartnerContribution[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!isOpen || !farmId) return;
+    if (!farmId || !partner.id) return;
     
-    setIsLoading(true);
+    // Fallback if index isn't ready
     const q = query(
-      collection(db, 'partner_contributions'), 
+      collection(db, 'partnerContributions'), 
       where('farmId', '==', farmId),
       where('partnerId', '==', partner.id)
     );
-
-    const unsub = onSnapshot(q, (snapshot) => {
+    
+    const unsub = onSnapshot(q, snap => {
       const data: PartnerContribution[] = [];
-      snapshot.forEach(doc => data.push({ id: doc.id, ...doc.data() } as PartnerContribution));
-      // Sort by createdAt ascending to calculate running total
-      data.sort((a, b) => a.createdAt - b.createdAt);
+      snap.forEach(d => data.push({ id: d.id, ...d.data() } as PartnerContribution));
+      // Sort in memory to avoid missing index errors
+      data.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
       setContributions(data);
-      setIsLoading(false);
-    }, (error) => {
-      console.error(error);
-      setIsLoading(false);
+      setLoading(false);
     });
-
+    
     return () => unsub();
-  }, [isOpen, farmId, partner.id]);
+  }, [farmId, partner.id]);
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-4xl shadow-xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95">
-        <div className="flex items-center justify-between p-6 border-b border-stone-100 bg-stone-50/50">
-          <div>
-            <h2 className="text-xl font-bold text-stone-800">{t.contributionHistory || 'Contribution History'}</h2>
-            <p className="text-sm text-stone-500 mt-1">{partner.name} • {t.runningTotal || 'Total'}: <span className="font-bold text-green-700">Rs. {partner.investmentAmount.toLocaleString()}</span></p>
-          </div>
+    <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center p-4 z-[60]">
+      <div className="bg-white rounded-2xl w-full max-w-3xl h-[80vh] flex flex-col shadow-xl">
+        <div className="flex justify-between items-center p-6 border-b border-stone-100 bg-stone-50">
           <div className="flex items-center space-x-3">
-            <button className="flex items-center space-x-2 px-4 py-2 bg-white border border-stone-200 text-stone-700 font-medium hover:bg-stone-50 rounded-xl transition-colors">
-              <Download size={16} />
-              <span>{t.printExport || 'Export'}</span>
-            </button>
-            <button onClick={onClose} className="p-2 text-stone-400 hover:text-stone-600 rounded-full hover:bg-stone-100 transition-colors">
-              <X size={20} />
-            </button>
+            <div className="p-2 bg-blue-100 text-blue-700 rounded-lg"><FileText size={20} /></div>
+            <div>
+              <h2 className="text-xl font-bold text-stone-800">Partner Ledger</h2>
+              <p className="text-sm text-stone-500">{partner.name} &bull; Total Capital: Rs. {partner.investmentAmount?.toLocaleString()}</p>
+            </div>
           </div>
+          <button onClick={onClose} className="text-stone-400 hover:text-stone-600 p-1"><X size={20} /></button>
         </div>
         
         <div className="flex-1 overflow-auto p-6">
-          {isLoading ? (
-            <div className="flex justify-center items-center py-12">
-              <Loader2 className="w-8 h-8 animate-spin text-green-600" />
-            </div>
-          ) : contributions.length === 0 ? (
-            <div className="text-center py-12 text-stone-500 bg-stone-50 rounded-2xl border border-dashed border-stone-200">
-              <FileText size={48} className="mx-auto mb-4 text-stone-300" />
-              <p>{t.noContributions || 'No contributions found for this partner.'}</p>
-            </div>
+          {loading ? (
+            <div className="text-center text-stone-500 p-8">Loading...</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-stone-200">
-                    <th className="py-3 px-4 text-sm font-semibold text-stone-600 bg-stone-50 rounded-tl-xl">{t.contributionDate || 'Date (B.S.)'}</th>
-                    <th className="py-3 px-4 text-sm font-semibold text-stone-600 bg-stone-50">{t.contributionAmount || 'Amount'}</th>
-                    <th className="py-3 px-4 text-sm font-semibold text-stone-600 bg-stone-50">{t.paymentMethod || 'Method'}</th>
-                    <th className="py-3 px-4 text-sm font-semibold text-stone-600 bg-stone-50">{t.remarksNotes || 'Remarks'}</th>
-                    <th className="py-3 px-4 text-sm font-semibold text-stone-600 bg-stone-50 rounded-tr-xl">{t.runningTotal || 'Running Total'}</th>
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-stone-50 border-b border-stone-200 text-stone-500 font-medium text-sm">
+                  <th className="p-4 w-16">S.N.</th>
+                  <th className="p-4">{t.dateBS}</th>
+                  <th className="p-4">Payment Method</th>
+                  <th className="p-4">Remarks</th>
+                  <th className="p-4 text-right">Amount (Rs.)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {contributions.map((c, idx) => (
+                  <tr key={c.id} className="border-b border-stone-100 hover:bg-stone-50">
+                    <td className="p-4 text-stone-600">{contributions.length - idx}</td>
+                    <td className="p-4 text-stone-800 whitespace-nowrap">{c.dateBS}</td>
+                    <td className="p-4 text-stone-600">
+                      <span className="inline-flex px-2 py-1 rounded-md text-xs font-medium bg-stone-100 text-stone-700">
+                        {c.paymentMethod}
+                      </span>
+                    </td>
+                    <td className="p-4 text-stone-600">{c.notes || '-'}</td>
+                    <td className="p-4 text-right font-bold text-emerald-600">
+                      + {c.amount.toLocaleString()}
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-stone-100">
-                  {(() => {
-                    let runningTotal = 0;
-                    return contributions.map((contrib) => {
-                      runningTotal += contrib.amount;
-                      return (
-                        <tr key={contrib.id} className="hover:bg-stone-50/50 transition-colors">
-                          <td className="py-3 px-4 text-sm text-stone-700 font-medium">{contrib.dateBS}</td>
-                          <td className="py-3 px-4 text-sm font-bold text-green-600">+Rs. {contrib.amount.toLocaleString()}</td>
-                          <td className="py-3 px-4 text-sm text-stone-600">
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-stone-100 text-stone-800">
-                              {contrib.paymentMethod}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-sm text-stone-600 max-w-[200px] truncate" title={contrib.notes}>
-                            {contrib.notes || '-'}
-                          </td>
-                          <td className="py-3 px-4 text-sm font-bold text-stone-900">
-                            Rs. {runningTotal.toLocaleString()}
-                          </td>
-                        </tr>
-                      );
-                    });
-                  })()}
-                </tbody>
-              </table>
-            </div>
+                ))}
+                {contributions.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="p-8 text-center text-stone-500">No contributions found.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           )}
         </div>
       </div>

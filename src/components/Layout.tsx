@@ -23,7 +23,10 @@ export default function Layout() {
   useEffect(() => {
     if (!farmId) return;
     const unsub = onSnapshot(doc(db, 'farms', farmId), snap => {
-      if (snap.exists()) setFarmName(snap.data().name);
+      if (snap.exists()) {
+        setFarmName(snap.data().name);
+        setFarmLogo(snap.data().logoUrl || '');
+      }
     });
     return () => unsub();
   }, [farmId]);
@@ -159,39 +162,24 @@ export default function Layout() {
       </AnimatePresence>
 
       {/* Sidebar Desktop */}
-      <aside className={`w-72 bg-white/80 backdrop-blur-xl border-r border-stone-200/50 flex flex-col ${isMobileMenuOpen ? 'fixed inset-y-0 left-0 z-50 shadow-2xl' : 'hidden lg:flex'}`}>
+      <aside className={`w-72 bg-emerald-800 border-r border-emerald-900/50 flex flex-col print:hidden ${isMobileMenuOpen ? 'fixed inset-y-0 left-0 z-50 shadow-2xl' : 'hidden lg:flex'}`}>
         <div className="p-6">
           <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold bg-gradient-to-br from-emerald-600 to-emerald-800 bg-clip-text text-transparent">
+            <h1 className="text-2xl font-bold text-white">
               {t.appTitle}
             </h1>
             {isMobileMenuOpen && (
-              <button onClick={() => setIsMobileMenuOpen(false)} className="lg:hidden p-2 text-stone-500 hover:bg-stone-100 rounded-xl">
+              <button onClick={() => setIsMobileMenuOpen(false)} className="lg:hidden p-2 text-emerald-200 hover:bg-emerald-700 rounded-xl">
                 <X size={20} />
               </button>
             )}
           </div>
           {farmName && (
-            <div className="mt-2 inline-flex items-center space-x-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-semibold border border-emerald-100/50">
+            <div className="mt-2 inline-flex items-center space-x-1.5 px-2.5 py-1 bg-emerald-900/40 text-emerald-100 rounded-lg text-xs font-semibold border border-emerald-700/50">
               <MapIcon size={12} />
               <span>{farmName}</span>
             </div>
           )}
-        </div>
-        
-        <div className="px-4 mb-4">
-          <button 
-            onClick={() => setIsCmdPaletteOpen(true)}
-            className="w-full flex items-center justify-between px-3 py-2 bg-stone-100 hover:bg-stone-200/70 text-stone-500 rounded-xl transition-colors text-sm font-medium border border-stone-200/50"
-          >
-            <div className="flex items-center space-x-2">
-              <Search size={16} />
-              <span>Search...</span>
-            </div>
-            <div className="flex items-center space-x-1 text-xs opacity-70">
-              <Command size={12} /><span>K</span>
-            </div>
-          </button>
         </div>
 
         <nav className="flex-1 px-4 space-y-1 overflow-y-auto pb-4">
@@ -208,15 +196,15 @@ export default function Layout() {
                 {isActive && (
                   <motion.div 
                     layoutId="activeNavIndicator"
-                    className="absolute inset-0 bg-emerald-50 rounded-xl border border-emerald-100/50"
+                    className="absolute inset-0 bg-emerald-900/60 rounded-xl border border-emerald-700/50"
                     transition={{ type: "spring", stiffness: 300, damping: 30 }}
                   />
                 )}
                 <div className={`relative flex items-center space-x-3 px-4 py-3 rounded-xl transition-colors ${
-                  isActive ? 'text-emerald-700' : 'text-stone-500 hover:text-stone-800 hover:bg-stone-50'
+                  isActive ? 'text-white font-semibold' : 'text-emerald-100/70 hover:text-white hover:bg-emerald-700/50'
                 }`}>
-                  <Icon size={20} className={isActive ? 'text-emerald-600' : ''} />
-                  <span className="font-semibold text-sm">{item.label}</span>
+                  <Icon size={20} className={isActive ? 'text-white' : 'opacity-80'} />
+                  <span className="text-sm">{item.label}</span>
                 </div>
               </Link>
             );
@@ -238,9 +226,9 @@ export default function Layout() {
       </AnimatePresence>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col h-screen overflow-hidden relative w-full">
+      <main className="flex-1 flex flex-col h-screen overflow-hidden relative w-full print:h-auto print:overflow-visible">
         {/* Header */}
-        <header className="bg-white/80 backdrop-blur-xl border-b border-stone-200/50 h-16 flex items-center justify-between px-4 lg:px-8 shrink-0 relative z-20">
+        <header className="bg-white/80 backdrop-blur-xl border-b border-stone-200/50 h-16 flex items-center justify-between px-4 lg:px-8 shrink-0 relative z-20 print:hidden">
           <div className="flex items-center space-x-3">
             <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="lg:hidden p-2 -ml-2 text-stone-600 hover:bg-stone-100 rounded-xl transition-colors">
               <Menu size={24} />
@@ -318,15 +306,15 @@ export default function Layout() {
         </header>
 
         {/* Page Content */}
-        <div className="flex-1 overflow-auto p-4 lg:p-8 bg-stone-50/50 relative">
-          <div className="max-w-7xl mx-auto h-full">
+        <div className="flex-1 overflow-auto p-4 lg:p-8 bg-stone-50/50 relative print:overflow-visible print:bg-white print:p-0">
+          <div className="max-w-7xl mx-auto h-full print:max-w-none">
             <Outlet />
           </div>
         </div>
       </main>
 
       {/* Floating Action Button (Mobile Only) */}
-      <div className="lg:hidden fixed bottom-6 right-6 z-50">
+      <div className="lg:hidden fixed bottom-6 right-6 z-50 print:hidden">
         <AnimatePresence>
           {isFabOpen && (
             <motion.div 

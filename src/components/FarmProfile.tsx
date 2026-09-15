@@ -3,7 +3,9 @@ import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAppStore } from '../store';
 import { translations } from '../lib/translations';
-import { Save, Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Save, Loader2, CheckCircle, AlertTriangle, Upload, X } from 'lucide-react';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { storage } from '../lib/firebase';
 
 export default function FarmProfile() {
   const { language, user } = useAppStore();
@@ -17,11 +19,14 @@ export default function FarmProfile() {
     regNumber: '',
     email: '',
     phone: '',
+    logoUrl: '',
   });
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+  const logoInputRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!farmId) {
@@ -43,6 +48,7 @@ export default function FarmProfile() {
             regNumber: data.regNumber || '',
             email: data.email || '',
             phone: data.phone || '',
+            logoUrl: data.logoUrl || '',
           });
         } else {
           // Fallback to settings collection if not found in farms
@@ -61,6 +67,24 @@ export default function FarmProfile() {
 
     fetchFarmProfile();
   }, [farmId]);
+
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !farmId) return;
+    setIsUploading(true);
+    try {
+      const storageRef = ref(storage, `farm-logos/${farmId}/${file.name}`);
+      await uploadBytes(storageRef, file);
+      const url = await getDownloadURL(storageRef);
+      setProfile({ ...profile, logoUrl: url });
+    } catch (err) {
+      console.error("Logo upload failed", err);
+      setFeedback({ type: "error", message: "Failed to upload logo." });
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,6 +105,7 @@ export default function FarmProfile() {
         regNumber: profile.regNumber,
         email: profile.email,
         phone: profile.phone,
+        logoUrl: profile.logoUrl,
         farmId: farmId,
         updatedAt: serverTimestamp(),
         updatedBy: user.uid
@@ -130,6 +155,39 @@ export default function FarmProfile() {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="col-span-1 md:col-span-2 mb-4">
+          <h2 className="text-lg font-bold text-stone-800 border-b border-stone-100 pb-2 mb-4">Branding & Logo</h2>
+          <div className="flex items-center space-x-6">
+            <div className="w-24 h-24 rounded-2xl border-2 border-dashed border-stone-300 flex items-center justify-center bg-stone-50 overflow-hidden relative shrink-0">
+              {profile.logoUrl ? (
+                <img src={profile.logoUrl} alt="Farm Logo" className="w-full h-full object-contain" />
+              ) : (
+                <span className="text-stone-400 text-xs text-center px-2">No Logo<br/>Uploaded</span>
+              )}
+              {isUploading && (
+                <div className="absolute inset-0 bg-white/80 flex items-center justify-center">
+                  <Loader2 className="w-6 h-6 animate-spin text-green-600" />
+                </div>
+              )}
+            </div>
+            <div className="space-y-3">
+              <input 
+                type="file" 
+                accept="image/*" 
+                className="hidden" 
+                ref={logoInputRef}
+                onChange={handleLogoUpload}
+              />
+              <button type="button" onClick={() => logoInputRef.current?.click()} className="flex items-center space-x-2 px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg text-sm font-medium transition-colors">
+                <Upload size={16} />
+                <span>Upload Logo (JPG, PNG)</span>
+              </button>
+              <button type="button" onClick={() => setProfile({...profile, logoUrl: ""})} className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium transition-colors block">
+                Remove Logo
+              </button>
+            </div>
+          </div>
+        </div>
         <div>
           <label className="block text-sm font-medium text-stone-700 mb-1">{t.farmName || 'Farm Name'} *</label>
           <input

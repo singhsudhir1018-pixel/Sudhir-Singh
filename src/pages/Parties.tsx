@@ -97,6 +97,23 @@ export default function Parties() {
     }
   };
 
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !farmId) return;
+    setIsUploadingPhoto(true);
+    try {
+      const storageRef = ref(storage, `partner-photos/${farmId}/${file.name}`);
+      await uploadBytes(storageRef, file);
+      const url = await getDownloadURL(storageRef);
+      setPartnerForm({ ...partnerForm, photoUrl: url });
+    } catch (err) {
+      console.error(err);
+      alert("Failed to upload photo");
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
   const handleSavePartner = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!farmId) return;
@@ -465,9 +482,43 @@ export default function Parties() {
               <button onClick={() => setIsPartnerModalOpen(false)} className="text-stone-400 hover:text-stone-600 p-1"><X size={20} /></button>
             </div>
             <form onSubmit={handleSavePartner} className="p-6 space-y-4">
+              <div className="flex items-center space-x-6 pb-2">
+                <div className="w-20 h-20 rounded-full bg-stone-100 border-2 border-dashed border-stone-300 flex items-center justify-center overflow-hidden relative shrink-0">
+                  {partnerForm.photoUrl ? (
+                    <img src={partnerForm.photoUrl} alt="Photo" className="w-full h-full object-cover" />
+                  ) : (
+                    <Users size={24} className="text-stone-400" />
+                  )}
+                  {isUploadingPhoto && (
+                    <div className="absolute inset-0 bg-white/80 flex items-center justify-center">
+                      <Loader2 size={20} className="animate-spin text-blue-600" />
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <input type="file" accept="image/*" className="hidden" ref={photoInputRef} onChange={handlePhotoUpload} />
+                  <button type="button" onClick={() => photoInputRef.current?.click()} className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2">
+                    <Upload size={16} /><span>Upload Photo</span>
+                  </button>
+                  {partnerForm.photoUrl && (
+                    <button type="button" onClick={() => setPartnerForm({...partnerForm, photoUrl: ""})} className="text-xs text-red-600 font-medium">Remove Photo</button>
+                  )}
+                </div>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-stone-700 mb-1">{t.name}</label>
                 <input type="text" required value={partnerForm.name} onChange={e => setPartnerForm({...partnerForm, name: e.target.value})} className="w-full px-4 py-2 border border-stone-200 rounded-xl focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-stone-700 mb-1">Email Address</label>
+                  <input type="email" value={partnerForm.email} onChange={e => setPartnerForm({...partnerForm, email: e.target.value})} className="w-full px-4 py-2 border border-stone-200 rounded-xl focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-stone-700 mb-1">Address</label>
+                  <input type="text" value={partnerForm.address} onChange={e => setPartnerForm({...partnerForm, address: e.target.value})} className="w-full px-4 py-2 border border-stone-200 rounded-xl focus:ring-2 focus:ring-blue-500" />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>

@@ -44,11 +44,15 @@ app.post('/api/ai/summary', async (req, res) => {
     
     res.json({ summary: response.text });
   } catch (error: any) {
-    console.error('Error generating summary:', error);
+    const errString = String(error);
+    const isQuotaError = errString.includes('429') || errString.includes('RESOURCE_EXHAUSTED') || error?.status === 429;
+    
+    if (!isQuotaError) {
+      console.error('Error generating summary:', error);
+    }
     
     // Graceful fallback for 429 Quota Exceeded
-    const errString = String(error);
-    if (errString.includes('429') || errString.includes('RESOURCE_EXHAUSTED') || error?.status === 429) {
+    if (isQuotaError) {
       const fallbackMsg = language === 'ne' 
         ? '🤖 AI सेवाको दैनिक नि:शुल्क सीमा (Quota) नाघेको छ। कृपया भोलि फेरि प्रयास गर्नुहोस्।' 
         : '🤖 AI daily free quota exceeded. Please try again tomorrow.';
@@ -107,11 +111,15 @@ app.post('/api/ai/parse-receipt', upload.single('receipt'), async (req, res) => 
     const parsedData = JSON.parse(resultText);
     res.json(parsedData);
   } catch (error: any) {
-    console.error('Error parsing receipt:', error);
+    const errString = String(error);
+    const isQuotaError = errString.includes('429') || errString.includes('RESOURCE_EXHAUSTED') || error?.status === 429;
+    
+    if (!isQuotaError) {
+      console.error('Error parsing receipt:', error);
+    }
     
     // Graceful fallback for 429 Quota Exceeded
-    const errString = String(error);
-    if (errString.includes('429') || errString.includes('RESOURCE_EXHAUSTED') || error?.status === 429) {
+    if (isQuotaError) {
       return res.status(429).json({ error: 'AI daily free quota exceeded. Please enter details manually.' });
     }
 

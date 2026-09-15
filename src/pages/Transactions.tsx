@@ -1,7 +1,7 @@
 import React from 'react';
 import { useState, useRef, useEffect } from 'react';
 import { useAppStore } from '../store';
-import CategorySelect from '../components/CategorySelect';
+import SearchableCategorySelect from '../components/SearchableCategorySelect';
 import { translations } from '../lib/translations';
 import NepaliDate from 'nepali-datetime';
 import NepaliDatePicker from '../components/NepaliDatePicker';
@@ -21,9 +21,13 @@ export default function Transactions() {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [accounts, setAccounts] = useState<BankAccount[]>([]);
 
+  const [activeTab, setActiveTab] = useState<'EXPENSE' | 'INCOME'>('EXPENSE');
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [parsing, setParsing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  
+  const [previewTx, setPreviewTx] = useState<Transaction | null>(null);
 
   const initialForm = {
     type: 'EXPENSE' as 'INCOME' | 'EXPENSE',
@@ -127,6 +131,44 @@ export default function Transactions() {
     try {
       const batch = writeBatch(db);
 
+      // Auto-resolve account based on paymentMethod
+      let resolvedAccountId = '';
+      if (formData.paymentMethod !== 'CREDIT') {
+        const match = accounts.find(a => a.type === formData.paymentMethod);
+        if (match) {
+          resolvedAccountId = match.id;
+        } else {
+          // auto-create if missing
+          const newAccRef = doc(collection(db, 'bankAccounts'));
+          batch.set(newAccRef, {
+             farmId,
+             name: formData.paymentMethod === 'CASH' ? 'Cash' : (formData.paymentMethod === 'BANK' ? 'Bank' : 'Wallet'),
+             type: formData.paymentMethod,
+             accountNumber: '',
+             bankName: '',
+             initialBalance: 0,
+             currentBalance: 0,
+             status: 'ACTIVE',
+             createdAt: Date.now()
+          });
+          resolvedAccountId = newAccRef.id;
+          // inject to local array so subsequent find() succeeds
+          accounts.push({
+             id: resolvedAccountId,
+             farmId,
+             name: formData.paymentMethod,
+             type: formData.paymentMethod as any,
+             accountNumber: '',
+             bankName: '',
+             initialBalance: 0,
+             currentBalance: 0,
+             status: 'ACTIVE',
+          });
+        }
+      }
+      
+      payload.accountId = resolvedAccountId;
+
       if (editingId) {
         const oldTx = transactions.find(t => t.id === editingId);
         
@@ -160,12 +202,12 @@ export default function Transactions() {
         batch.update(doc(db, 'transactions', editingId), payload);
 
         // Apply new account balance
-        if (formData.accountId && formData.paymentMethod !== 'CREDIT') {
-          const newAcc = accounts.find(a => a.id === formData.accountId);
+        if (resolvedAccountId && formData.paymentMethod !== 'CREDIT') {
+          const newAcc = accounts.find(a => a.id === resolvedAccountId);
           if (newAcc) {
             const applyAmt = formData.type === 'INCOME' ? amt : -amt;
             let finalBal = newAcc.currentBalance;
-            if (oldTx && oldTx.accountId === formData.accountId) {
+            if (oldTx && oldTx.accountId === resolvedAccountId) {
                const revertAmt = oldTx.type === 'INCOME' ? -oldTx.amount : oldTx.amount;
                finalBal += revertAmt;
             }
@@ -198,8 +240,8 @@ export default function Transactions() {
         batch.set(newTxRef, payload);
 
         // Apply new account balance
-        if (formData.accountId && formData.paymentMethod !== 'CREDIT') {
-          const acc = accounts.find(a => a.id === formData.accountId);
+        if (resolvedAccountId && formData.paymentMethod !== 'CREDIT') {
+          const acc = accounts.find(a => a.id === resolvedAccountId);
           if (acc) {
             const applyAmt = formData.type === 'INCOME' ? amt : -amt;
             batch.update(doc(db, 'bankAccounts', acc.id), { currentBalance: acc.currentBalance + applyAmt });
@@ -281,6 +323,8 @@ export default function Transactions() {
 
   const getPartyName = (id?: string) => parties.find(p => p.id === id)?.name || '-';
 
+  const filteredTransactions = transactions.filter(tx => tx.type === activeTab);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -293,19 +337,36 @@ export default function Transactions() {
               <span className="font-medium">{t.receiptScanner}</span>
             </button>
           </div>
-          <button onClick={() => { setFormData(initialForm); setEditingId(null); setIsModalOpen(true); }} className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors">
+          <button onClick={() => { setFormData({...initialForm, type: activeTab}); setEditingId(null); setIsModalOpen(true); }} className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors">
             <Plus size={18} />
             <span className="font-medium">{t.addTransaction}</span>
           </button>
         </div>
       </div>
 
+      <div className="flex space-x-2 border-b border-stone-200">
+        <button
+          onClick={() => setActiveTab('EXPENSE')}
+          className={`px-6 py-3 font-medium text-sm transition-colors relative ${activeTab === 'EXPENSE' ? 'text-rose-700' : 'text-stone-500 hover:text-stone-700'}`}
+        >
+          {t.expense}
+          {activeTab === 'EXPENSE' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-rose-600" />}
+        </button>
+        <button
+          onClick={() => setActiveTab('INCOME')}
+          className={`px-6 py-3 font-medium text-sm transition-colors relative ${activeTab === 'INCOME' ? 'text-emerald-700' : 'text-stone-500 hover:text-stone-700'}`}
+        >
+          {t.income}
+          {activeTab === 'INCOME' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-600" />}
+        </button>
+      </div>
+
       <div className="bg-white rounded-2xl border border-stone-200 shadow-sm  overflow-x-auto">
         <table className="w-full text-left border-collapse min-w-[800px]">
           <thead>
             <tr className="bg-stone-50 border-b border-stone-200 text-stone-500 font-medium text-sm">
+              <th className="p-4 w-16">{t.sn}</th>
               <th className="p-4">{t.dateBS}</th>
-              <th className="p-4">{t.type}</th>
               <th className="p-4">{t.category}</th>
               <th className="p-4">{t.party}</th>
               <th className="p-4 text-right">{t.amount}</th>
@@ -313,32 +374,34 @@ export default function Transactions() {
             </tr>
           </thead>
           <tbody>
-            {transactions.map(tx => (
-              <tr key={tx.id} className="border-b border-stone-100 hover:bg-stone-50">
+            {filteredTransactions.map((tx, index) => (
+              <tr 
+                key={tx.id} 
+                className="border-b border-stone-100 hover:bg-stone-50 cursor-pointer"
+                onDoubleClick={() => setPreviewTx(tx)}
+              >
+                <td className="p-4 text-stone-600">{index + 1}</td>
                 <td className="p-4 text-stone-600">{tx.dateBS}</td>
-                <td className="p-4">
-                  <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${tx.type === 'INCOME' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-                    {tx.type === 'INCOME' ? t.income : t.expense}
-                  </span>
+                <td className="p-4 text-stone-800">
+                  {tx.subCategory ? tx.subCategory : tx.category}
                 </td>
-                <td className="p-4 text-stone-800">{tx.category}</td>
                 <td className="p-4 text-stone-600">{getPartyName(tx.partyId)}</td>
                 <td className="p-4 text-right font-medium text-stone-900">Rs. {tx.amount.toLocaleString()}</td>
                 <td className="p-4 text-center">
-                  <div className="flex justify-center items-center space-x-2">
+                  <div className="flex justify-center items-center space-x-2" onClick={(e) => e.stopPropagation()}>
                     <button onClick={() => openEdit(tx)} className="p-1.5 text-stone-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg">
                       <Edit2 size={16} />
                     </button>
-                    <button onClick={() => handleDelete(tx.id)} className="p-1.5 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
+                    <button onClick={() => handleDelete(tx.id)} className="p-1.5 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg">
                       <Trash2 size={16} />
                     </button>
                   </div>
                 </td>
               </tr>
             ))}
-            {transactions.length === 0 && (
+            {filteredTransactions.length === 0 && (
               <tr>
-                <td colSpan={6} className="p-8 text-center text-stone-500">{t.noData}</td>
+                <td colSpan={5} className="p-8 text-center text-stone-500">{t.noData}</td>
               </tr>
             )}
           </tbody>
@@ -357,7 +420,7 @@ export default function Transactions() {
             
             {parsing ? (
               <div className="p-12 text-center">
-                <div className="w-12 h-12 border-4 border-green-200 border-t-green-600 rounded-full animate-spin mx-auto mb-4"></div>
+                <div className="w-12 h-12 border-4 border-emerald-200 border-t-emerald-600 rounded-full animate-spin mx-auto mb-4"></div>
                 <p className="text-stone-600">{t.aiExtracting}</p>
               </div>
             ) : (
@@ -373,7 +436,7 @@ export default function Transactions() {
                         category: '',
                         subCategory: ''
                       })}
-                      className="w-full px-4 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500"
+                      className="w-full px-4 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     >
                       <option value="EXPENSE">{t.expense}</option>
                       <option value="INCOME">{t.income}</option>
@@ -385,7 +448,8 @@ export default function Transactions() {
                   </div>
                 </div>
 
-                <div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
                     <label className="block text-sm font-medium text-stone-700 mb-1">{t.amount}</label>
                     <input
                       type="number"
@@ -393,26 +457,29 @@ export default function Transactions() {
                       onChange={e => setFormData({...formData, amount: e.target.value})}
                       required
                       min="0"
-                      className="w-full px-4 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500"
+                      className="w-full px-4 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     />
                   </div>
                   
-                  <CategorySelect 
-                    type={formData.type}
-                    selectedCategoryName={formData.category}
-                    selectedSubCategoryName={formData.subCategory}
-                    onCategoryChange={(val) => setFormData({...formData, category: val})}
-                    onSubCategoryChange={(val) => setFormData({...formData, subCategory: val})}
-                    required
-                  />
+                  <div className="w-full">
+                    <SearchableCategorySelect 
+                      type={formData.type}
+                      selectedCategoryName={formData.category}
+                      selectedSubCategoryName={formData.subCategory}
+                      onCategoryChange={(val) => setFormData(prev => ({...prev, category: val}))}
+                      onSubCategoryChange={(val) => setFormData(prev => ({...prev, subCategory: val}))}
+                      required
+                    />
+                  </div>
+                </div>
 
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-stone-700 mb-1">{t.party} (Optional)</label>
                     <select 
                       value={formData.partyId}
                       onChange={e => setFormData({...formData, partyId: e.target.value})}
-                      className="w-full px-4 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500"
+                      className="w-full px-4 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     >
                       <option value="">{t.selectParty}</option>
                       {parties.map(p => (
@@ -425,27 +492,12 @@ export default function Transactions() {
                     <select 
                       value={formData.paymentMethod}
                       onChange={e => setFormData({...formData, paymentMethod: e.target.value})}
-                      className="w-full px-4 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500"
+                      className="w-full px-4 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     >
                       <option value="CASH">{t.cash}</option>
                       <option value="BANK">{t.bankTransfer}</option>
                       <option value="WALLET">{t.digitalWallet}</option>
                       <option value="CREDIT">{t.creditUdharo}</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-stone-700 mb-1">{t.accounts || 'Account'}</label>
-                    <select 
-                      value={formData.accountId}
-                      onChange={e => setFormData({...formData, accountId: e.target.value})}
-                      className="w-full px-4 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500"
-                      disabled={formData.paymentMethod === 'CREDIT'}
-                      required={formData.paymentMethod !== 'CREDIT'}
-                    >
-                      <option value="">{t.selectAccount || '-- Select Account --'}</option>
-                      {accounts.map(a => (
-                        <option key={a.id} value={a.id}>{a.name} (Rs.{a.currentBalance})</option>
-                      ))}
                     </select>
                   </div>
                 </div>
@@ -456,7 +508,7 @@ export default function Transactions() {
                     value={formData.notes}
                     onChange={e => setFormData({...formData, notes: e.target.value})}
                     rows={2}
-                    className="w-full px-4 py-2 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500"
+                    className="w-full px-4 py-2 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
 
@@ -464,13 +516,71 @@ export default function Transactions() {
                   <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-2.5 text-stone-600 font-medium hover:bg-stone-100 rounded-xl transition-colors">
                     {t.cancel}
                   </button>
-                  <button type="submit" className="flex items-center space-x-2 px-5 py-2.5 bg-green-600 text-white font-medium hover:bg-green-700 rounded-xl transition-colors">
+                  <button type="submit" className="flex items-center space-x-2 px-5 py-2.5 bg-emerald-600 text-white font-medium hover:bg-emerald-700 rounded-xl transition-colors">
                     <Save size={18} />
                     <span>{t.saveEntry}</span>
                   </button>
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Preview Modal */}
+      {previewTx && (
+        <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-xl overflow-hidden">
+            <div className={`p-6 text-white ${previewTx.type === 'INCOME' ? 'bg-emerald-600' : 'bg-rose-600'} flex justify-between items-start`}>
+              <div>
+                <span className="text-white/80 text-sm font-medium uppercase tracking-wider">{previewTx.type === 'INCOME' ? t.income : t.expense}</span>
+                <h2 className="text-3xl font-bold mt-1">Rs. {previewTx.amount.toLocaleString()}</h2>
+              </div>
+              <button onClick={() => setPreviewTx(null)} className="text-white/80 hover:text-white p-1">
+                <X size={24} />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-y-4 gap-x-6 text-sm">
+                <div>
+                  <p className="text-stone-500 mb-1">{t.dateBS}</p>
+                  <p className="font-medium text-stone-900">{previewTx.dateBS}</p>
+                </div>
+                <div>
+                  <p className="text-stone-500 mb-1">{t.category}</p>
+                  <p className="font-medium text-stone-900">
+                    {previewTx.subCategory ? previewTx.subCategory : previewTx.category}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-stone-500 mb-1">{t.paymentMethod}</p>
+                  <p className="font-medium text-stone-900">{previewTx.paymentMethod || 'CASH'}</p>
+                </div>
+                <div>
+                  <p className="text-stone-500 mb-1">{t.party}</p>
+                  <p className="font-medium text-stone-900">{getPartyName(previewTx.partyId)}</p>
+                </div>
+              </div>
+
+              {previewTx.notes && (
+                <div className="pt-4 border-t border-stone-100">
+                  <p className="text-stone-500 text-sm mb-2">{t.notes || 'Notes'}</p>
+                  <div className="bg-stone-50 p-4 rounded-xl text-stone-700 text-sm whitespace-pre-wrap">
+                    {previewTx.notes}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-stone-100 bg-stone-50 flex justify-end gap-3">
+              <button onClick={() => { openEdit(previewTx); setPreviewTx(null); }} className="px-4 py-2 text-blue-700 font-medium hover:bg-blue-100 rounded-xl transition-colors">
+                {t.edit || 'Edit'}
+              </button>
+              <button onClick={() => setPreviewTx(null)} className="px-4 py-2 bg-stone-200 text-stone-800 font-medium hover:bg-stone-300 rounded-xl transition-colors">
+                {t.cancel || 'Close'}
+              </button>
+            </div>
           </div>
         </div>
       )}
