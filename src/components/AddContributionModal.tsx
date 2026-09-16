@@ -35,19 +35,23 @@ export default function AddContributionModal({ partner, accounts, isOpen, onClos
       const numAmount = Number(amount);
 
       await runTransaction(db, async (transaction) => {
-        // 1. Update Partner Capital
+        // --- READS ---
+        // 1. Get Partner
         const partnerRef = doc(db, 'partners', partner.id);
         const partnerDoc = await transaction.get(partnerRef);
-        if (!partnerDoc.exists()) throw "Partner does not exist!";
+        if (!partnerDoc.exists()) throw new Error("Partner does not exist!");
         
+        // 2. Get Bank Account
+        const accRef = doc(db, 'bankAccounts', accountId);
+        const accDoc = await transaction.get(accRef);
+        if (!accDoc.exists()) throw new Error("Account does not exist!");
+
+        // --- WRITES ---
+        // 1. Update Partner Capital
         const newInvestment = partnerDoc.data().investmentAmount + numAmount;
         transaction.update(partnerRef, { investmentAmount: newInvestment });
 
         // 2. Update Bank Account Balance
-        const accRef = doc(db, 'bankAccounts', accountId);
-        const accDoc = await transaction.get(accRef);
-        if (!accDoc.exists()) throw "Account does not exist!";
-        
         const newBalance = accDoc.data().balance + numAmount;
         transaction.update(accRef, { balance: newBalance });
 
@@ -118,7 +122,7 @@ export default function AddContributionModal({ partner, accounts, isOpen, onClos
             <select required value={accountId} onChange={e => setAccountId(e.target.value)} className="w-full px-4 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-blue-500">
               <option value="">-- Select Account --</option>
               {accounts.map(a => (
-                <option key={a.id} value={a.id}>{a.name} (Rs. {a.balance?.toLocaleString()})</option>
+                <option key={a.id} value={a.id}>{a.name} (Rs. {a.currentBalance?.toLocaleString()})</option>
               ))}
             </select>
           </div>

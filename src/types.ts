@@ -52,7 +52,6 @@ export interface Party {
   address?: string;
   email?: string;
   photoUrl?: string;
-  address?: string;
   panVat?: string;
   pendingBalance: number;
 }
@@ -160,8 +159,6 @@ export interface GeneralSettings {
   panNumber: string;
   email: string;
   phone: string;
-  address?: string;
-  email?: string;
   photoUrl?: string;
   regNumber: string;
   currencyFormat: 'SOUTH_ASIAN' | 'INTERNATIONAL';
@@ -175,8 +172,6 @@ export interface FarmProfileSettings {
   panNumber: string;
   email: string;
   phone: string;
-  address?: string;
-  email?: string;
   photoUrl?: string;
   regNumber: string;
   currencyFormat: 'SOUTH_ASIAN' | 'INTERNATIONAL';

@@ -5,19 +5,22 @@ import { translations } from '../lib/translations';
 import { Party, Partner, BankAccount } from '../types';
 import AddContributionModal from '../components/AddContributionModal';
 import PartnerLedgerModal from '../components/PartnerLedgerModal';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 import NepaliDate from 'nepali-datetime';
 import { collection, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, doc, writeBatch } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { compressImage } from '../lib/imageUtils';
 import { 
   Users, Briefcase, Plus, Search, Filter, Edit2, Trash2, BookOpen, 
-  ArrowUpRight, ArrowDownRight, X, Save, TrendingUp
+  ArrowUpRight, ArrowDownRight, X, Save, TrendingUp, Upload, Loader2
 } from 'lucide-react';
 
 export default function Parties() {
   const { language, farmId } = useAppStore();
   const t = translations[language];
   const [activeTab, setActiveTab] = useState<'PARTIES' | 'PARTNERS'>('PARTIES');
+  const photoInputRef = React.useRef<HTMLInputElement>(null);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
 
   const [parties, setParties] = useState<Party[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
@@ -33,7 +36,7 @@ export default function Parties() {
   const [selectedPartnerForLedger, setSelectedPartnerForLedger] = useState<Partner | null>(null);
 
   const initialParty = { name: '', type: 'BUYER' as const, phone: '', address: '', panVat: '', pendingBalance: 0 };
-  const initialPartner = { name: '', investmentAmount: 0, profitSharePercentage: 0, phone: '', joiningDateBS: new NepaliDate().format('YYYY MMMM DD'), dividendPayable: 0, accountId: '', paymentMethod: 'CASH' };
+  const initialPartner = { name: '', investmentAmount: 0, profitSharePercentage: 0, phone: '', joiningDateBS: new NepaliDate().format('YYYY MMMM DD'), dividendPayable: 0, accountId: '', paymentMethod: 'CASH', email: '', address: '', photoUrl: '' };
   
   const [partyForm, setPartyForm] = useState(initialParty);
   const [partnerForm, setPartnerForm] = useState(initialPartner);
@@ -45,6 +48,7 @@ export default function Parties() {
     const unsubParties = onSnapshot(qParties, (snapshot) => {
       const data: Party[] = [];
       snapshot.forEach(doc => data.push({ id: doc.id, ...doc.data() } as Party));
+      data.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       setParties(data);
     }, (error) => {
       console.warn("Firestore err", error.message);
@@ -54,6 +58,7 @@ export default function Parties() {
     const unsubPartners = onSnapshot(qPartners, (snapshot) => {
       const data: Partner[] = [];
       snapshot.forEach(doc => data.push({ id: doc.id, ...doc.data() } as Partner));
+      data.sort((a, b) => (b.joiningDateBS || '').localeCompare(a.joiningDateBS || ''));
       setPartners(data);
     }, (error) => {
        console.warn("Firestore err", error.message);
@@ -130,7 +135,10 @@ export default function Parties() {
           profitSharePercentage: Number(partnerForm.profitSharePercentage), 
           phone: partnerForm.phone,
           joiningDateBS: partnerForm.joiningDateBS,
-          dividendPayable: Number(partnerForm.dividendPayable) 
+          dividendPayable: Number(partnerForm.dividendPayable),
+          email: partnerForm.email || '',
+          address: partnerForm.address || '',
+          photoUrl: partnerForm.photoUrl || ''
         });
       } else {
         const newPartnerRef = doc(collection(db, 'partners'));
@@ -141,7 +149,10 @@ export default function Parties() {
           profitSharePercentage: Number(partnerForm.profitSharePercentage), 
           phone: partnerForm.phone,
           joiningDateBS: partnerForm.joiningDateBS,
-          dividendPayable: Number(partnerForm.dividendPayable) 
+          dividendPayable: Number(partnerForm.dividendPayable),
+          email: partnerForm.email || '',
+          address: partnerForm.address || '',
+          photoUrl: partnerForm.photoUrl || ''
         });
 
         // Add a transaction record for investment
@@ -194,14 +205,17 @@ export default function Parties() {
   const openEditPartner = (partner: Partner) => {
     setEditingId(partner.id);
     setPartnerForm({ 
-      name: partner.name, 
-      investmentAmount: partner.investmentAmount, 
-      profitSharePercentage: partner.profitSharePercentage, 
-      phone: partner.phone, 
-      joiningDateBS: partner.joiningDateBS, 
-      dividendPayable: partner.dividendPayable,
+      name: partner.name || '', 
+      investmentAmount: partner.investmentAmount || 0, 
+      profitSharePercentage: partner.profitSharePercentage || 0, 
+      phone: partner.phone || '', 
+      joiningDateBS: partner.joiningDateBS || '', 
+      dividendPayable: partner.dividendPayable || 0,
       accountId: '', 
-      paymentMethod: 'CASH' 
+      paymentMethod: 'CASH',
+      email: partner.email || '',
+      address: partner.address || '',
+      photoUrl: partner.photoUrl || ''
     });
     setIsPartnerModalOpen(true);
   };
@@ -474,12 +488,21 @@ export default function Parties() {
       )}
 
       {isPartnerModalOpen && (
-        <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-xl m-auto my-8">
-             <div className="flex justify-between items-center p-6 border-b border-stone-100">
-              <h2 className="text-xl font-bold text-stone-800">{editingId ? t.edit : t.addPartner}</h2>
-              <button onClick={() => setIsPartnerModalOpen(false)} className="text-stone-400 hover:text-stone-600 p-1"><X size={20} /></button>
+        <ErrorBoundary fallback={
+          <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+            <div className="bg-white rounded-2xl w-full max-w-md p-6 m-auto">
+              <h2 className="text-xl font-bold text-red-600 mb-2">Render Error</h2>
+              <p className="text-stone-600 mb-4">Something went wrong while loading the partner profile.</p>
+              <button onClick={() => setIsPartnerModalOpen(false)} className="px-4 py-2 bg-stone-100 rounded-lg">Close</button>
             </div>
+          </div>
+        }>
+          <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+            <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-xl m-auto my-8">
+               <div className="flex justify-between items-center p-6 border-b border-stone-100">
+                <h2 className="text-xl font-bold text-stone-800">{editingId ? t.edit : t.addPartner}</h2>
+                <button onClick={() => setIsPartnerModalOpen(false)} className="text-stone-400 hover:text-stone-600 p-1"><X size={20} /></button>
+              </div>
             <form onSubmit={handleSavePartner} className="p-6 space-y-4">
               <div className="flex items-center space-x-6 pb-2">
                 <div className="w-20 h-20 rounded-full bg-stone-100 border-2 border-dashed border-stone-300 flex items-center justify-center overflow-hidden relative shrink-0">
@@ -575,6 +598,7 @@ export default function Parties() {
             </form>
           </div>
         </div>
+        </ErrorBoundary>
       )}
 
     

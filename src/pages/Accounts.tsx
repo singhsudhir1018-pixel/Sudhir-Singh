@@ -51,6 +51,7 @@ export default function Accounts() {
     const unsubAcc = onSnapshot(query(collection(db, 'bankAccounts'), where('farmId', '==', farmId)), snap => {
       const data: BankAccount[] = [];
       snap.forEach(d => data.push({ id: d.id, ...d.data() } as BankAccount));
+      data.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       setAccounts(data);
     });
 

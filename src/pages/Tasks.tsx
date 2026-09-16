@@ -22,6 +22,7 @@ export default function Tasks() {
     const unsub = onSnapshot(query(collection(db, 'tasks'), where('farmId', '==', farmId)), snap => {
       const data: Task[] = [];
       snap.forEach(d => data.push({ id: d.id, ...d.data() } as Task));
+      data.sort((a, b) => (a.dueDateBS || '').localeCompare(b.dueDateBS || ''));
       setTasks(data);
     });
     return () => unsub();

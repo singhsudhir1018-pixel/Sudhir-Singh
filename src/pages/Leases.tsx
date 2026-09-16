@@ -31,6 +31,7 @@ export default function Leases() {
     const unsub = onSnapshot(query(collection(db, 'leases'), where('farmId', '==', farmId)), snap => {
       const data: Lease[] = [];
       snap.forEach(d => data.push({ id: d.id, ...d.data() } as Lease));
+      data.sort((a, b) => (b.startDateBS || '').localeCompare(a.startDateBS || ''));
       setLeases(data);
     });
     return () => unsub();

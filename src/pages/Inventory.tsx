@@ -37,6 +37,7 @@ export default function Inventory() {
     const unsubInv = onSnapshot(query(collection(db, 'inventory'), where('farmId', '==', farmId)), snap => {
       const data: InventoryItem[] = [];
       snap.forEach(d => data.push({ id: d.id, ...d.data() } as InventoryItem));
+      data.sort((a, b) => (a.itemName || '').localeCompare(b.itemName || ''));
       setInventory(data);
     });
 

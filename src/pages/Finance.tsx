@@ -25,11 +25,8 @@ export default function Finance() {
       const data: Transaction[] = [];
       snap.forEach(d => data.push({ id: d.id, ...d.data() } as Transaction));
       
-      // Sort chronologically ascending for running balance calculation
-      data.sort((a, b) => {
-        if (!a.createdAt || !b.createdAt) return 0;
-        return a.createdAt - b.createdAt;
-      });
+      // Sort by dateBS descending
+      data.sort((a, b) => b.dateBS.localeCompare(a.dateBS));
       setTransactions(data);
     });
     

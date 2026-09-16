@@ -6,7 +6,7 @@ import { translations } from '../lib/translations';
 import NepaliDate from 'nepali-datetime';
 import NepaliDatePicker from '../components/NepaliDatePicker';
 import { Plus, UploadCloud, Save, X, Edit2, Trash2 } from 'lucide-react';
-import { collection, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, doc, writeBatch } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, doc, writeBatch, runTransaction, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Transaction, Category, Party, Batch, BankAccount } from '../types';
 
@@ -40,6 +40,11 @@ export default function Transactions() {
     dateBS: new NepaliDate().format('YYYY MMMM DD'),
     paymentMethod: 'CASH',
     notes: '',
+    addToInventory: false,
+    inventoryItemName: '',
+    quantity: '',
+    unit: 'kg',
+    unitPrice: '',
   };
   const [formData, setFormData] = useState(initialForm);
 
@@ -129,145 +134,179 @@ export default function Transactions() {
     };
 
     try {
-      const batch = writeBatch(db);
-
-      // Auto-resolve account based on paymentMethod
-      let resolvedAccountId = '';
-      if (formData.paymentMethod !== 'CREDIT') {
-        const match = accounts.find(a => a.type === formData.paymentMethod);
-        if (match) {
-          resolvedAccountId = match.id;
-        } else {
-          // auto-create if missing
-          const newAccRef = doc(collection(db, 'bankAccounts'));
-          batch.set(newAccRef, {
-             farmId,
-             name: formData.paymentMethod === 'CASH' ? 'Cash' : (formData.paymentMethod === 'BANK' ? 'Bank' : 'Wallet'),
-             type: formData.paymentMethod,
-             accountNumber: '',
-             bankName: '',
-             initialBalance: 0,
-             currentBalance: 0,
-             status: 'ACTIVE',
-             createdAt: Date.now()
-          });
-          resolvedAccountId = newAccRef.id;
-          // inject to local array so subsequent find() succeeds
-          accounts.push({
-             id: resolvedAccountId,
-             farmId,
-             name: formData.paymentMethod,
-             type: formData.paymentMethod as any,
-             accountNumber: '',
-             bankName: '',
-             initialBalance: 0,
-             currentBalance: 0,
-             status: 'ACTIVE',
-          });
+      let matchingInvItem: any = null;
+      if (formData.addToInventory && formData.inventoryItemName) {
+        const invQuery = query(collection(db, 'inventory'), where('farmId', '==', farmId), where('itemName', '==', formData.inventoryItemName.trim()));
+        const snap = await getDocs(invQuery);
+        if (!snap.empty) {
+          matchingInvItem = { id: snap.docs[0].id, ...snap.docs[0].data() };
         }
       }
-      
-      payload.accountId = resolvedAccountId;
 
-      if (editingId) {
-        const oldTx = transactions.find(t => t.id === editingId);
+      await runTransaction(db, async (transaction) => {
+        // --- READS ---
+        let oldTx: Transaction | undefined;
+        let oldAccDoc: any = null;
+        let oldPartyDoc: any = null;
         
-        // Revert old account balance
-        if (oldTx && oldTx.accountId) {
-          const oldAcc = accounts.find(a => a.id === oldTx.accountId);
-          if (oldAcc) {
-            const revertAmt = oldTx.type === 'INCOME' ? -oldTx.amount : oldTx.amount;
-            batch.update(doc(db, 'bankAccounts', oldAcc.id), { currentBalance: oldAcc.currentBalance + revertAmt });
+        if (editingId) {
+          const oldTxRef = doc(db, 'transactions', editingId);
+          const oldTxSnap = await transaction.get(oldTxRef);
+          if (oldTxSnap.exists()) {
+             oldTx = { id: oldTxSnap.id, ...oldTxSnap.data() } as Transaction;
+             
+             if (oldTx.accountId) {
+                const oaRef = doc(db, 'bankAccounts', oldTx.accountId);
+                oldAccDoc = await transaction.get(oaRef);
+             }
+             if (oldTx.partyId) {
+                const opRef = doc(db, 'parties', oldTx.partyId);
+                oldPartyDoc = await transaction.get(opRef);
+             }
           }
         }
         
-        // Revert old party balance
-        if (oldTx && oldTx.partyId && oldTx.paymentMethod !== 'CREDIT') {
-          const oldParty = parties.find(p => p.id === oldTx.partyId);
-          if (oldParty) {
-            // INCOME from BUYER = settled udharo, so revert means increase pending balance
-            // EXPENSE to SUPPLIER = settled payable, so revert means increase pending balance
-            const revertAmt = oldTx.type === 'INCOME' ? oldTx.amount : oldTx.amount;
-            batch.update(doc(db, 'parties', oldParty.id), { pendingBalance: oldParty.pendingBalance + revertAmt });
-          }
-        }
-        // If it was CREDIT, the transaction increased their pending balance, so revert means decrease
-        if (oldTx && oldTx.partyId && oldTx.paymentMethod === 'CREDIT') {
-          const oldParty = parties.find(p => p.id === oldTx.partyId);
-          if (oldParty) {
-            batch.update(doc(db, 'parties', oldParty.id), { pendingBalance: oldParty.pendingBalance - oldTx.amount });
-          }
-        }
+        let resolvedAccountId = '';
+        let newAccDoc: any = null;
+        let newAccRef: any = null;
         
-        batch.update(doc(db, 'transactions', editingId), payload);
+        if (formData.paymentMethod !== 'CREDIT') {
+          const match = accounts.find(a => a.type === formData.paymentMethod);
+          if (match) {
+            resolvedAccountId = match.id;
+            newAccRef = doc(db, 'bankAccounts', resolvedAccountId);
+            newAccDoc = await transaction.get(newAccRef);
+          }
+        }
 
-        // Apply new account balance
-        if (resolvedAccountId && formData.paymentMethod !== 'CREDIT') {
-          const newAcc = accounts.find(a => a.id === resolvedAccountId);
-          if (newAcc) {
-            const applyAmt = formData.type === 'INCOME' ? amt : -amt;
-            let finalBal = newAcc.currentBalance;
-            if (oldTx && oldTx.accountId === resolvedAccountId) {
-               const revertAmt = oldTx.type === 'INCOME' ? -oldTx.amount : oldTx.amount;
-               finalBal += revertAmt;
+        let newPartyDoc: any = null;
+        let newPartyRef: any = null;
+        if (formData.partyId) {
+          newPartyRef = doc(db, 'parties', formData.partyId);
+          newPartyDoc = await transaction.get(newPartyRef);
+        }
+
+        let invDoc: any = null;
+        let invRef: any = null;
+        if (formData.addToInventory && formData.inventoryItemName) {
+           invRef = matchingInvItem ? doc(db, 'inventory', matchingInvItem.id) : doc(collection(db, 'inventory'));
+           if (matchingInvItem) {
+              invDoc = await transaction.get(invRef);
+           }
+        }
+        
+        // --- WRITES ---
+        if (formData.paymentMethod !== 'CREDIT' && !resolvedAccountId) {
+           newAccRef = doc(collection(db, 'bankAccounts'));
+           transaction.set(newAccRef, {
+              farmId,
+              name: formData.paymentMethod === 'CASH' ? 'Cash' : (formData.paymentMethod === 'BANK' ? 'Bank' : 'Wallet'),
+              type: formData.paymentMethod,
+              accountNumber: '', bankName: '', initialBalance: 0, currentBalance: 0, status: 'ACTIVE', createdAt: Date.now()
+           });
+           resolvedAccountId = newAccRef.id;
+           newAccDoc = { exists: () => true, data: () => ({ currentBalance: 0 }) };
+        }
+
+        payload.accountId = resolvedAccountId;
+
+        if (editingId && oldTx) {
+          // Revert old account balance
+          if (oldAccDoc && oldAccDoc.exists()) {
+             const revertAmt = oldTx.type === 'INCOME' ? -oldTx.amount : oldTx.amount;
+             transaction.update(oldAccDoc.ref, { currentBalance: oldAccDoc.data().currentBalance + revertAmt });
+          }
+          
+          // Revert old party balance
+          if (oldPartyDoc && oldPartyDoc.exists()) {
+            if (oldTx.paymentMethod !== 'CREDIT') {
+               const revertAmt = oldTx.type === 'INCOME' ? oldTx.amount : oldTx.amount;
+               transaction.update(oldPartyDoc.ref, { pendingBalance: oldPartyDoc.data().pendingBalance + revertAmt });
+            } else {
+               transaction.update(oldPartyDoc.ref, { pendingBalance: oldPartyDoc.data().pendingBalance - oldTx.amount });
             }
-            finalBal += applyAmt;
-            batch.update(doc(db, 'bankAccounts', newAcc.id), { currentBalance: finalBal });
+          }
+          
+          transaction.update(doc(db, 'transactions', editingId), payload);
+
+          // Apply new account balance
+          if (resolvedAccountId && formData.paymentMethod !== 'CREDIT') {
+             const applyAmt = formData.type === 'INCOME' ? amt : -amt;
+             let finalBal = 0;
+             if (oldTx.accountId === resolvedAccountId && oldAccDoc && oldAccDoc.exists()) {
+                 const revertAmt = oldTx.type === 'INCOME' ? -oldTx.amount : oldTx.amount;
+                 finalBal = oldAccDoc.data().currentBalance + revertAmt + applyAmt;
+                 transaction.update(newAccRef, { currentBalance: finalBal });
+             } else if (newAccDoc && newAccDoc.exists()) { 
+                 finalBal = newAccDoc.data().currentBalance + applyAmt;
+                 transaction.update(newAccRef, { currentBalance: finalBal });
+             }
+          }
+          
+          // Apply new party balance
+          if (formData.partyId) {
+             let finalBal = 0;
+             if (oldTx.partyId === formData.partyId && oldPartyDoc && oldPartyDoc.exists()) {
+                let revertAmt = 0;
+                if (oldTx.paymentMethod !== 'CREDIT') revertAmt = oldTx.type === 'INCOME' ? oldTx.amount : oldTx.amount;
+                else revertAmt = -oldTx.amount;
+                finalBal = oldPartyDoc.data().pendingBalance + revertAmt;
+                
+                if (formData.paymentMethod !== 'CREDIT') finalBal -= amt;
+                else finalBal += amt;
+                transaction.update(newPartyRef, { pendingBalance: finalBal });
+             } else if (newPartyDoc && newPartyDoc.exists()) {
+                finalBal = newPartyDoc.data().pendingBalance;
+                if (formData.paymentMethod !== 'CREDIT') finalBal -= amt;
+                else finalBal += amt;
+                transaction.update(newPartyRef, { pendingBalance: finalBal });
+             }
+          }
+        } else {
+          (payload as any).createdAt = Date.now();
+          const newTxRef = doc(collection(db, 'transactions'));
+          transaction.set(newTxRef, payload);
+
+          if (resolvedAccountId && formData.paymentMethod !== 'CREDIT' && newAccDoc && newAccDoc.exists()) {
+             const applyAmt = formData.type === 'INCOME' ? amt : -amt;
+             transaction.update(newAccRef, { currentBalance: newAccDoc.data().currentBalance + applyAmt });
+          }
+
+          if (formData.partyId && newPartyDoc && newPartyDoc.exists()) {
+             const party = newPartyDoc.data();
+             if (formData.paymentMethod !== 'CREDIT') {
+                transaction.update(newPartyRef, { pendingBalance: party.pendingBalance - amt });
+             } else {
+                transaction.update(newPartyRef, { pendingBalance: party.pendingBalance + amt });
+             }
           }
         }
         
-        // Apply new party balance
-        if (formData.partyId) {
-          const newParty = parties.find(p => p.id === formData.partyId);
-          if (newParty) {
-             let finalBal = newParty.pendingBalance;
-             if (oldTx && oldTx.partyId === formData.partyId) {
-                if (oldTx.paymentMethod !== 'CREDIT') finalBal += oldTx.amount;
-                else finalBal -= oldTx.amount;
-             }
-             if (formData.paymentMethod !== 'CREDIT') {
-                finalBal -= amt;
-             } else {
-                finalBal += amt;
-             }
-             batch.update(doc(db, 'parties', newParty.id), { pendingBalance: finalBal });
-          }
+        // Inventory Auto-Add logic
+        if (formData.addToInventory && formData.inventoryItemName) {
+           if (invDoc && invDoc.exists()) {
+              transaction.update(invRef, { currentStock: invDoc.data().currentStock + Number(formData.quantity) });
+           } else {
+              transaction.set(invRef, {
+                 farmId,
+                 itemName: formData.inventoryItemName.trim(),
+                 category: formData.category,
+                 subCategory: formData.subCategory || '',
+                 currentStock: Number(formData.quantity),
+                 unit: formData.unit,
+                 unitPrice: Number(formData.unitPrice) || (amt / Number(formData.quantity)),
+                 minThreshold: 10,
+              });
+           }
         }
-
-      } else {
-        (payload as any).createdAt = Date.now();
-        const newTxRef = doc(collection(db, 'transactions'));
-        batch.set(newTxRef, payload);
-
-        // Apply new account balance
-        if (resolvedAccountId && formData.paymentMethod !== 'CREDIT') {
-          const acc = accounts.find(a => a.id === resolvedAccountId);
-          if (acc) {
-            const applyAmt = formData.type === 'INCOME' ? amt : -amt;
-            batch.update(doc(db, 'bankAccounts', acc.id), { currentBalance: acc.currentBalance + applyAmt });
-          }
-        }
-        
-        // Apply new party balance
-        if (formData.partyId) {
-          const party = parties.find(p => p.id === formData.partyId);
-          if (party) {
-             if (formData.paymentMethod !== 'CREDIT') {
-                batch.update(doc(db, 'parties', party.id), { pendingBalance: party.pendingBalance - amt });
-             } else {
-                batch.update(doc(db, 'parties', party.id), { pendingBalance: party.pendingBalance + amt });
-             }
-          }
-        }
-      }
-
-      await batch.commit();
+      });
 
       setIsModalOpen(false);
       setEditingId(null);
       setFormData(initialForm);
     } catch (err) {
       console.error("Save failed", err);
+      alert(t.error || "Save failed. Please try again.");
     }
   };
 
@@ -323,7 +362,9 @@ export default function Transactions() {
 
   const getPartyName = (id?: string) => parties.find(p => p.id === id)?.name || '-';
 
-  const filteredTransactions = transactions.filter(tx => tx.type === activeTab);
+  const filteredTransactions = transactions
+    .filter(tx => tx.type === activeTab)
+    .sort((a, b) => b.dateBS.localeCompare(a.dateBS));
 
   return (
     <div className="space-y-6">
@@ -466,8 +507,22 @@ export default function Transactions() {
                       type={formData.type}
                       selectedCategoryName={formData.category}
                       selectedSubCategoryName={formData.subCategory}
-                      onCategoryChange={(val) => setFormData(prev => ({...prev, category: val}))}
-                      onSubCategoryChange={(val) => setFormData(prev => ({...prev, subCategory: val}))}
+                      onCategoryChange={(val) => {
+                         const isInv = ['feed', 'medicine', 'seed', 'fertilizer', 'दाना', 'औषधि', 'बिउ', 'मल', 'विषादी'].some(k => val.toLowerCase().includes(k));
+                         setFormData(prev => ({
+                           ...prev, 
+                           category: val,
+                           ...((isInv && prev.type === 'EXPENSE' && !editingId) ? { addToInventory: true, inventoryItemName: val } : {})
+                         }));
+                      }}
+                      onSubCategoryChange={(val) => {
+                         const isInv = ['feed', 'medicine', 'seed', 'fertilizer', 'दाना', 'औषधि', 'बिउ', 'मल', 'विषादी'].some(k => val.toLowerCase().includes(k));
+                         setFormData(prev => ({
+                           ...prev, 
+                           subCategory: val,
+                           ...((isInv && prev.type === 'EXPENSE' && !editingId) ? { addToInventory: true, inventoryItemName: val } : {})
+                         }));
+                      }}
                       required
                     />
                   </div>
@@ -511,6 +566,74 @@ export default function Transactions() {
                     className="w-full px-4 py-2 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
+
+                {formData.type === 'EXPENSE' && (
+                  <div className="bg-stone-50 p-4 rounded-xl border border-stone-200 mt-4 space-y-4">
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={formData.addToInventory}
+                        onChange={(e) => setFormData({...formData, addToInventory: e.target.checked})}
+                        className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
+                      />
+                      <span className="font-medium text-stone-800">{t.addToInventory || 'Add to Inventory Stock'}</span>
+                    </label>
+
+                    {formData.addToInventory && (
+                      <div className="grid grid-cols-2 gap-4 animate-in fade-in zoom-in-95 duration-200">
+                        <div>
+                          <label className="block text-sm font-medium text-stone-700 mb-1">{t.itemName}</label>
+                          <input 
+                            type="text" 
+                            required
+                            value={formData.inventoryItemName}
+                            onChange={(e) => setFormData({...formData, inventoryItemName: e.target.value})}
+                            className="w-full px-4 py-2 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                            placeholder="e.g. Fish Feed"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-stone-700 mb-1">Quantity (परिमाण)</label>
+                          <input 
+                            type="number" 
+                            required
+                            min="0"
+                            step="0.01"
+                            value={formData.quantity}
+                            onChange={(e) => setFormData({...formData, quantity: e.target.value})}
+                            className="w-full px-4 py-2 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-stone-700 mb-1">{t.unit}</label>
+                          <select 
+                            value={formData.unit}
+                            onChange={(e) => setFormData({...formData, unit: e.target.value})}
+                            className="w-full px-4 py-2 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                          >
+                            <option value="kg">kg (किलो)</option>
+                            <option value="ltr">ltr (लिटर)</option>
+                            <option value="bag">bag (बोरा)</option>
+                            <option value="packet">packet (प्याकेट)</option>
+                            <option value="pcs">pcs (गोटा)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-stone-700 mb-1">{t.unitPrice}</label>
+                          <input 
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={formData.unitPrice}
+                            onChange={(e) => setFormData({...formData, unitPrice: e.target.value})}
+                            className="w-full px-4 py-2 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                            placeholder="Auto-calculated if blank"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="pt-4 flex justify-end space-x-3">
                   <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-2.5 text-stone-600 font-medium hover:bg-stone-100 rounded-xl transition-colors">
