@@ -237,7 +237,7 @@ export default function Finance() {
               })()}
               {transactions.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-stone-500">{t.noData}</td>
+                  <td colSpan={8} className="p-8 text-center text-stone-500">{t.noData}</td>
                 </tr>
               )}
             </tbody>
@@ -263,9 +263,9 @@ export default function Finance() {
             
             <div className="space-y-4">
               <div className="flex justify-between pb-3 border-b border-stone-100">
-                <span className="text-stone-500">Type</span>
-                <span className={`font-medium ${previewTx.type === INCOME ? text-emerald-600 : text-rose-600}`}>
-                  {previewTx.type}
+                <span className="text-stone-500">{t.type || 'Type'}</span>
+                <span className={`font-medium ${previewTx.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                  {previewTx.type === 'INCOME' ? t.income : t.expense}
                 </span>
               </div>
               <div className="flex justify-between pb-3 border-b border-stone-100">

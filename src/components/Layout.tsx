@@ -17,6 +17,7 @@ export default function Layout() {
   const isOnline = useNetworkStatus();
   const { language, setLanguage, user, farmId } = useAppStore();
   const [farmName, setFarmName] = useState('');
+  const [farmLogo, setFarmLogo] = useState('');
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -175,9 +176,13 @@ export default function Layout() {
             )}
           </div>
           {farmName && (
-            <div className="mt-2 inline-flex items-center space-x-1.5 px-2.5 py-1 bg-emerald-900/40 text-emerald-100 rounded-lg text-xs font-semibold border border-emerald-700/50">
-              <MapIcon size={12} />
-              <span>{farmName}</span>
+            <div className="mt-2 inline-flex items-center space-x-1.5 px-2.5 py-1 bg-emerald-900/40 text-emerald-100 rounded-lg text-xs font-semibold border border-emerald-700/50 max-w-full">
+              {farmLogo ? (
+                <img src={farmLogo} alt="Logo" className="w-4 h-4 rounded-full object-cover shrink-0" />
+              ) : (
+                <MapIcon size={12} className="shrink-0" />
+              )}
+              <span className="truncate">{farmName}</span>
             </div>
           )}
         </div>
@@ -233,13 +238,24 @@ export default function Layout() {
             <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="lg:hidden p-2 -ml-2 text-stone-600 hover:bg-stone-100 rounded-xl transition-colors">
               <Menu size={24} />
             </button>
-            <div className="lg:hidden flex flex-col">
+            <div className="lg:hidden flex items-center space-x-2">
+              {farmLogo && (
+                <img src={farmLogo} alt="Logo" className="w-6 h-6 rounded-md object-cover border border-stone-200" />
+              )}
               <h1 className="text-lg font-bold bg-gradient-to-br from-emerald-600 to-emerald-800 bg-clip-text text-transparent">{t.appTitle}</h1>
             </div>
-            <div className="hidden lg:block"> 
-              <h2 className="text-lg font-semibold text-stone-800">
-                {user?.name ? `${t.welcome}, ${user.name.split(' ')[0]}` : t.welcome}
-              </h2>
+            <div className="hidden lg:flex items-center space-x-3"> 
+              {farmLogo && (
+                <img src={farmLogo} alt="Farm Logo" className="w-9 h-9 rounded-lg object-cover border border-stone-200 shadow-sm" />
+              )}
+              <div>
+                <h2 className="text-base font-semibold text-stone-800 leading-tight">
+                  {farmName || (user?.name ? `${t.welcome}, ${user.name.split(' ')[0]}` : t.welcome)}
+                </h2>
+                {farmName && user?.name && (
+                  <p className="text-xs text-stone-500">{user.name}</p>
+                )}
+              </div>
             </div>
           </div>
           

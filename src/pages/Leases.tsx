@@ -261,8 +261,12 @@ export default function Leases() {
                 <button onClick={() => setPreviewDoc(null)} className="p-1.5 text-stone-500 hover:bg-stone-200 rounded-lg"><X size={20}/></button>
               </div>
             </div>
-            <div className="flex-1 bg-stone-100 p-4 rounded-b-2xl overflow-hidden">
-              <iframe src={previewDoc} className="w-full h-full rounded-lg border border-stone-200 bg-white" title="Document Preview" />
+            <div className="flex-1 bg-stone-100 p-4 rounded-b-2xl overflow-auto flex items-center justify-center">
+              {previewDoc.match(/\.(jpeg|jpg|gif|png|webp)($|\?)/i) ? (
+                <img src={previewDoc} alt="Document Preview" className="max-w-full max-h-full object-contain rounded-lg shadow-sm" />
+              ) : (
+                <iframe src={previewDoc} className="w-full h-full rounded-lg border border-stone-200 bg-white" title="Document Preview" />
+              )}
             </div>
           </div>
         </div>
