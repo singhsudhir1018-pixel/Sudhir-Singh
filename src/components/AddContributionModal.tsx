@@ -52,8 +52,8 @@ export default function AddContributionModal({ partner, accounts, isOpen, onClos
         transaction.update(partnerRef, { investmentAmount: newInvestment });
 
         // 2. Update Bank Account Balance
-        const newBalance = accDoc.data().balance + numAmount;
-        transaction.update(accRef, { balance: newBalance });
+        const newBalance = (accDoc.data().currentBalance || 0) + numAmount;
+        transaction.update(accRef, { currentBalance: newBalance });
 
         // 3. Record Contribution History
         const contributionRef = doc(collection(db, 'partnerContributions'));
@@ -66,7 +66,22 @@ export default function AddContributionModal({ partner, accounts, isOpen, onClos
           targetAccountId: accountId,
           paymentMethod,
           notes,
-          createdAt: serverTimestamp()
+          createdAt: Date.now()
+        });
+
+        // 4. Record as CAPITAL_INFLOW in the main transactions ledger
+        const txRef = doc(collection(db, 'transactions'));
+        transaction.set(txRef, {
+          farmId,
+          type: 'CAPITAL_INFLOW',
+          amount: numAmount,
+          category: 'Partner Capital',
+          partyId: partner.id,
+          accountId: accountId,
+          paymentMethod,
+          dateBS,
+          notes: notes || `Capital Contribution by ${partner.name}`,
+          createdAt: Date.now(),
         });
       });
 

@@ -9,7 +9,7 @@ export interface Farm {
 export interface Transaction {
   id: string;
   farmId: string;
-  type: 'INCOME' | 'EXPENSE';
+  type: 'INCOME' | 'EXPENSE' | 'CAPITAL_INFLOW';
   amount: number;
   category: string;
   subCategory?: string;

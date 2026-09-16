@@ -159,7 +159,7 @@ export default function Parties() {
         const txRef = doc(collection(db, 'transactions'));
         batch.set(txRef, {
           farmId,
-          type: 'INCOME',
+          type: 'CAPITAL_INFLOW',
           amount: pAmt,
           category: 'Partner Capital',
           accountId: partnerForm.accountId,

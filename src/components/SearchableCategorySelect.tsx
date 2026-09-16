@@ -9,7 +9,7 @@ import { Plus, X, Check, Loader2, ChevronDown, Search } from 'lucide-react';
 import { useOnClickOutside } from '../hooks/useOnClickOutside';
 
 interface Props {
-  type: 'INCOME' | 'EXPENSE' | 'INVENTORY';
+  type: 'INCOME' | 'EXPENSE' | 'INVENTORY' | 'CAPITAL_INFLOW';
   selectedCategoryName: string;
   selectedSubCategoryName?: string;
   onCategoryChange: (categoryName: string) => void;

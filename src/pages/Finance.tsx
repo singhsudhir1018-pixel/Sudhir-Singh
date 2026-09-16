@@ -13,6 +13,7 @@ export default function Finance() {
   const t = translations[language];
   const navigate = useNavigate();
   const [previewTx, setPreviewTx] = useState<Transaction | null>(null);
+  const [activeTab, setActiveTab] = useState<'ALL' | 'INCOME' | 'EXPENSE' | 'CAPITAL_INFLOW'>('ALL');
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
@@ -174,8 +175,14 @@ export default function Finance() {
       </div>
 
       <div className="bg-white rounded-2xl border border-stone-200 shadow-sm print:shadow-none print:border-stone-300 overflow-hidden">
-        <div className="p-6 border-b border-stone-100 bg-stone-50/50">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-6 border-b border-stone-100 bg-stone-50/50">
            <h2 className="text-lg font-bold text-stone-800">{language === 'ne' ? 'सबै कारोबार विवरण (Ledger)' : 'All Transactions Ledger'}</h2>
+           <div className="flex space-x-2 mt-4 sm:mt-0 print:hidden overflow-x-auto w-full sm:w-auto pb-2 sm:pb-0">
+             <button onClick={() => setActiveTab('ALL')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'ALL' ? 'bg-stone-800 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}>{t.all || 'All'}</button>
+             <button onClick={() => setActiveTab('INCOME')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'INCOME' ? 'bg-emerald-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}>{t.income || 'Income'}</button>
+             <button onClick={() => setActiveTab('EXPENSE')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'EXPENSE' ? 'bg-rose-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}>{t.expense || 'Expense'}</button>
+             <button onClick={() => setActiveTab('CAPITAL_INFLOW')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'CAPITAL_INFLOW' ? 'bg-indigo-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'}`}>{t.capitalInflow || 'Capital / Equity'}</button>
+           </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -194,15 +201,16 @@ export default function Finance() {
             <tbody>
               {(() => {
                  let runningBalance = 0;
-                 return transactions.map((tx, idx) => {
+                 const filteredTx = transactions.filter(tx => activeTab === 'ALL' ? true : tx.type === activeTab);
+                 return filteredTx.map((tx, idx) => {
                    
                    return (
                     <tr key={tx.id || idx} className="border-b border-stone-100 hover:bg-stone-50 print:border-stone-200">
                       <td className="p-4 text-stone-600">{idx + 1}</td>
                       <td className="p-4 text-stone-600 whitespace-nowrap">{tx.dateBS}</td>
                       <td className="p-4">
-                        <span className={`px-2 py-1 text-xs rounded-full font-medium ${tx.type === 'INCOME' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                          {tx.type === 'INCOME' ? t.income : t.expense}
+                        <span className={`px-2 py-1 text-xs rounded-full font-medium ${tx.type === 'INCOME' ? 'bg-emerald-100 text-emerald-700' : tx.type === 'EXPENSE' ? 'bg-rose-100 text-rose-700' : 'bg-indigo-100 text-indigo-700'}`}>
+                          {tx.type === 'INCOME' ? t.income : tx.type === 'EXPENSE' ? t.expense : (t.capitalInflow || 'Capital')}
                         </span>
                       </td>
                       <td className="p-4 text-stone-800 font-medium">
@@ -212,7 +220,7 @@ export default function Finance() {
                       <td className="p-4 text-stone-600">
                         {getAccountName(tx.accountId, tx.paymentMethod)}
                       </td>
-                      <td className={`p-4 text-right font-medium ${tx.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      <td className={`p-4 text-right font-medium ${tx.type === 'INCOME' ? 'text-emerald-600' : tx.type === 'CAPITAL_INFLOW' ? 'text-indigo-600' : 'text-rose-600'}`}>
                         Rs. {tx.amount.toLocaleString()}
                       </td>
                       <td className="p-4 text-center print:hidden">

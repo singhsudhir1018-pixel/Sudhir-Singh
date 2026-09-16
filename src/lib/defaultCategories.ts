@@ -3,7 +3,7 @@ import { db } from './firebase';
 
 export interface DefaultCategoryDef {
   name: string;
-  type: 'EXPENSE' | 'INCOME' | 'INVENTORY';
+  type: 'EXPENSE' | 'INCOME' | 'INVENTORY' | 'CAPITAL_INFLOW';
   subCategories: string[];
 }
 
@@ -68,7 +68,7 @@ export const DEFAULT_FARM_CATEGORIES: DefaultCategoryDef[] = [
   },
   {
     name: 'Partner Capital / साझेदार लगानी',
-    type: 'INCOME',
+    type: 'CAPITAL_INFLOW',
     subCategories: ['Contribution', 'Initial Capital']
   },
   {

@@ -206,7 +206,7 @@ export default function Accounts() {
         id: tx.id,
         dateBS: tx.dateBS,
         desc: `${tx.category} ${tx.notes ? `(${tx.notes})` : ''}`,
-        inflow: tx.type === 'INCOME' ? tx.amount : 0,
+        inflow: (tx.type === 'INCOME' || tx.type === 'CAPITAL_INFLOW') ? tx.amount : 0,
         outflow: tx.type === 'EXPENSE' ? tx.amount : 0,
         ts: tx.createdAt || 0
       });

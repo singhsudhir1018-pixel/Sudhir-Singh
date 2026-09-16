@@ -21,7 +21,7 @@ export default function Transactions() {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [accounts, setAccounts] = useState<BankAccount[]>([]);
 
-  const [activeTab, setActiveTab] = useState<'EXPENSE' | 'INCOME'>('EXPENSE');
+  const [activeTab, setActiveTab] = useState<'ALL' | 'EXPENSE' | 'INCOME' | 'CAPITAL_INFLOW'>('ALL');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [parsing, setParsing] = useState(false);
@@ -30,7 +30,7 @@ export default function Transactions() {
   const [previewTx, setPreviewTx] = useState<Transaction | null>(null);
 
   const initialForm = {
-    type: 'EXPENSE' as 'INCOME' | 'EXPENSE',
+    type: 'EXPENSE' as 'INCOME' | 'EXPENSE' | 'CAPITAL_INFLOW',
     amount: '',
     category: '',
     subCategory: '',
@@ -211,16 +211,17 @@ export default function Transactions() {
         payload.accountId = resolvedAccountId;
 
         if (editingId && oldTx) {
-          // Revert old account balance
+            // Revert old account balance
           if (oldAccDoc && oldAccDoc.exists()) {
-             const revertAmt = oldTx.type === 'INCOME' ? -oldTx.amount : oldTx.amount;
+             const isOldInflow = oldTx.type === 'INCOME' || oldTx.type === 'CAPITAL_INFLOW';
+             const revertAmt = isOldInflow ? -oldTx.amount : oldTx.amount;
              transaction.update(oldAccDoc.ref, { currentBalance: oldAccDoc.data().currentBalance + revertAmt });
           }
           
           // Revert old party balance
           if (oldPartyDoc && oldPartyDoc.exists()) {
             if (oldTx.paymentMethod !== 'CREDIT') {
-               const revertAmt = oldTx.type === 'INCOME' ? oldTx.amount : oldTx.amount;
+               const revertAmt = oldTx.amount; // always add back what was paid
                transaction.update(oldPartyDoc.ref, { pendingBalance: oldPartyDoc.data().pendingBalance + revertAmt });
             } else {
                transaction.update(oldPartyDoc.ref, { pendingBalance: oldPartyDoc.data().pendingBalance - oldTx.amount });
@@ -231,10 +232,12 @@ export default function Transactions() {
 
           // Apply new account balance
           if (resolvedAccountId && formData.paymentMethod !== 'CREDIT') {
-             const applyAmt = formData.type === 'INCOME' ? amt : -amt;
+             const isNewInflow = formData.type === 'INCOME' || formData.type === 'CAPITAL_INFLOW';
+             const applyAmt = isNewInflow ? amt : -amt;
              let finalBal = 0;
              if (oldTx.accountId === resolvedAccountId && oldAccDoc && oldAccDoc.exists()) {
-                 const revertAmt = oldTx.type === 'INCOME' ? -oldTx.amount : oldTx.amount;
+                 const isOldInflow = oldTx.type === 'INCOME' || oldTx.type === 'CAPITAL_INFLOW';
+                 const revertAmt = isOldInflow ? -oldTx.amount : oldTx.amount;
                  finalBal = oldAccDoc.data().currentBalance + revertAmt + applyAmt;
                  transaction.update(newAccRef, { currentBalance: finalBal });
              } else if (newAccDoc && newAccDoc.exists()) { 
@@ -248,7 +251,7 @@ export default function Transactions() {
              let finalBal = 0;
              if (oldTx.partyId === formData.partyId && oldPartyDoc && oldPartyDoc.exists()) {
                 let revertAmt = 0;
-                if (oldTx.paymentMethod !== 'CREDIT') revertAmt = oldTx.type === 'INCOME' ? oldTx.amount : oldTx.amount;
+                if (oldTx.paymentMethod !== 'CREDIT') revertAmt = oldTx.amount;
                 else revertAmt = -oldTx.amount;
                 finalBal = oldPartyDoc.data().pendingBalance + revertAmt;
                 
@@ -268,7 +271,8 @@ export default function Transactions() {
           transaction.set(newTxRef, payload);
 
           if (resolvedAccountId && formData.paymentMethod !== 'CREDIT' && newAccDoc && newAccDoc.exists()) {
-             const applyAmt = formData.type === 'INCOME' ? amt : -amt;
+             const isNewInflow = formData.type === 'INCOME' || formData.type === 'CAPITAL_INFLOW';
+             const applyAmt = isNewInflow ? amt : -amt;
              transaction.update(newAccRef, { currentBalance: newAccDoc.data().currentBalance + applyAmt });
           }
 
@@ -319,7 +323,8 @@ export default function Transactions() {
         if (tx && tx.accountId && tx.paymentMethod !== 'CREDIT') {
           const acc = accounts.find(a => a.id === tx.accountId);
           if (acc) {
-            const revertAmt = tx.type === 'INCOME' ? -tx.amount : tx.amount;
+            const isOldInflow = tx.type === 'INCOME' || tx.type === 'CAPITAL_INFLOW';
+            const revertAmt = isOldInflow ? -tx.amount : tx.amount;
             batch.update(doc(db, 'bankAccounts', acc.id), { currentBalance: acc.currentBalance + revertAmt });
           }
         }
@@ -363,7 +368,7 @@ export default function Transactions() {
   const getPartyName = (id?: string) => parties.find(p => p.id === id)?.name || '-';
 
   const filteredTransactions = transactions
-    .filter(tx => tx.type === activeTab)
+    .filter(tx => activeTab === 'ALL' ? true : tx.type === activeTab)
     .sort((a, b) => b.dateBS.localeCompare(a.dateBS));
 
   return (
@@ -378,7 +383,7 @@ export default function Transactions() {
               <span className="font-medium">{t.receiptScanner}</span>
             </button>
           </div>
-          <button onClick={() => { setFormData({...initialForm, type: activeTab}); setEditingId(null); setIsModalOpen(true); }} className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors">
+          <button onClick={() => { setFormData({...initialForm, type: activeTab === 'ALL' ? 'EXPENSE' : activeTab}); setEditingId(null); setIsModalOpen(true); }} className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors">
             <Plus size={18} />
             <span className="font-medium">{t.addTransaction}</span>
           </button>
@@ -386,6 +391,13 @@ export default function Transactions() {
       </div>
 
       <div className="flex space-x-2 border-b border-stone-200">
+        <button
+          onClick={() => setActiveTab('ALL')}
+          className={`px-6 py-3 font-medium text-sm transition-colors relative ${activeTab === 'ALL' ? 'text-blue-700' : 'text-stone-500 hover:text-stone-700'}`}
+        >
+          {t.all || 'All'}
+          {activeTab === 'ALL' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />}
+        </button>
         <button
           onClick={() => setActiveTab('EXPENSE')}
           className={`px-6 py-3 font-medium text-sm transition-colors relative ${activeTab === 'EXPENSE' ? 'text-rose-700' : 'text-stone-500 hover:text-stone-700'}`}
@@ -399,6 +411,13 @@ export default function Transactions() {
         >
           {t.income}
           {activeTab === 'INCOME' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-600" />}
+        </button>
+        <button
+          onClick={() => setActiveTab('CAPITAL_INFLOW')}
+          className={`px-6 py-3 font-medium text-sm transition-colors relative ${activeTab === 'CAPITAL_INFLOW' ? 'text-indigo-700' : 'text-stone-500 hover:text-stone-700'}`}
+        >
+          {t.capitalInflow || 'Capital / Equity'}
+          {activeTab === 'CAPITAL_INFLOW' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600" />}
         </button>
       </div>
 
@@ -427,7 +446,7 @@ export default function Transactions() {
                   {tx.subCategory ? tx.subCategory : tx.category}
                 </td>
                 <td className="p-4 text-stone-600">{getPartyName(tx.partyId)}</td>
-                <td className="p-4 text-right font-medium text-stone-900">Rs. {tx.amount.toLocaleString()}</td>
+                <td className={`p-4 text-right font-medium ${tx.type === 'INCOME' ? 'text-emerald-600' : tx.type === 'CAPITAL_INFLOW' ? 'text-indigo-600' : 'text-rose-600'}`}>Rs. {tx.amount.toLocaleString()}</td>
                 <td className="p-4 text-center">
                   <div className="flex justify-center items-center space-x-2" onClick={(e) => e.stopPropagation()}>
                     <button onClick={() => openEdit(tx)} className="p-1.5 text-stone-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg">
