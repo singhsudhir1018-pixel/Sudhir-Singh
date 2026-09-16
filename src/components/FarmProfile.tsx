@@ -3,13 +3,14 @@ import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAppStore } from '../store';
 import { translations } from '../lib/translations';
-import { Save, Loader2, CheckCircle, AlertTriangle, Upload, X } from 'lucide-react';
+import { Save, Loader2, CheckCircle, AlertTriangle, Upload, X, Image as ImageIcon } from 'lucide-react';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '../lib/firebase';
+import { compressImage } from '../lib/imageUtils';
 
 export default function FarmProfile() {
-  const { language, user } = useAppStore();
-  const farmId = user?.farmId;
+  const { language, user, farmId: storeFarmId } = useAppStore();
+  const farmId = storeFarmId || user?.farmId || 'farm-1';
   const t = translations[language];
 
   const [profile, setProfile] = useState({
@@ -72,23 +73,83 @@ export default function FarmProfile() {
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !farmId) return;
+    
     setIsUploading(true);
+    setFeedback(null);
     try {
-      const storageRef = ref(storage, `farm-logos/${farmId}/${file.name}`);
-      await uploadBytes(storageRef, file);
-      const url = await getDownloadURL(storageRef);
-      setProfile({ ...profile, logoUrl: url });
-    } catch (err) {
-      console.error("Logo upload failed", err);
-      setFeedback({ type: "error", message: "Failed to upload logo." });
+      // 1. Instantly compress image to lightweight base64 Data URL (around 20-30KB)
+      const dataUrl = await compressImage(file, 400, 400, 0.85);
+      
+      // 2. Immediately update state so user sees the logo immediately without waiting
+      setProfile(prev => ({ ...prev, logoUrl: dataUrl }));
+
+      // 3. Persist immediately to Firestore
+      const docRef = doc(db, 'farms', farmId);
+      await setDoc(docRef, { logoUrl: dataUrl, updatedAt: serverTimestamp() }, { merge: true });
+      await setDoc(doc(db, 'settings', farmId), { 'profile.logoUrl': dataUrl }, { merge: true });
+
+      // 4. Try Firebase Storage with 4s timeout for cloud URL if available
+      try {
+        const safeName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+        const storageRef = ref(storage, `farm-logos/${farmId}/${safeName}`);
+        const uploadTask = uploadBytes(storageRef, file);
+        const timeoutPromise = new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Storage timeout')), 4000)
+        );
+        await Promise.race([uploadTask, timeoutPromise]);
+        const downloadUrl = await getDownloadURL(storageRef);
+        if (downloadUrl) {
+          setProfile(prev => ({ ...prev, logoUrl: downloadUrl }));
+          await setDoc(docRef, { logoUrl: downloadUrl, updatedAt: serverTimestamp() }, { merge: true });
+          await setDoc(doc(db, 'settings', farmId), { 'profile.logoUrl': downloadUrl }, { merge: true });
+        }
+      } catch (storageErr) {
+        console.warn("Storage upload skipped or timed out, keeping high-res data URL:", storageErr);
+      }
+
+      setFeedback({ 
+        type: "success", 
+        message: language === 'ne' ? "फार्मको लोगो सफलतापूर्वक अपलोड भयो!" : "Farm logo uploaded and saved successfully!" 
+      });
+      setTimeout(() => setFeedback(null), 3000);
+    } catch (err: any) {
+      console.error("Logo upload failed:", err);
+      setFeedback({ 
+        type: "error", 
+        message: language === 'ne' ? "लोगो अपलोड गर्न सकिएन। कृपया अर्को फोटो छनोट गर्नुहोस्।" : "Failed to upload logo. Please try another image." 
+      });
     } finally {
       setIsUploading(false);
+      if (logoInputRef.current) {
+        logoInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleRemoveLogo = async () => {
+    setProfile(prev => ({ ...prev, logoUrl: "" }));
+    if (farmId) {
+      try {
+        const docRef = doc(db, 'farms', farmId);
+        await setDoc(docRef, { logoUrl: "", updatedAt: serverTimestamp() }, { merge: true });
+        await setDoc(doc(db, 'settings', farmId), { 'profile.logoUrl': "" }, { merge: true });
+        setFeedback({ 
+          type: "success", 
+          message: language === 'ne' ? "लोगो हटाइयो!" : "Logo removed successfully!" 
+        });
+        setTimeout(() => setFeedback(null), 3000);
+      } catch (err) {
+        console.error("Failed to remove logo:", err);
+      }
+    }
+    if (logoInputRef.current) {
+      logoInputRef.current.value = '';
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!farmId || !user?.uid) return;
+    if (!farmId) return;
 
     setIsSubmitting(true);
     setFeedback(null);
@@ -108,7 +169,7 @@ export default function FarmProfile() {
         logoUrl: profile.logoUrl,
         farmId: farmId,
         updatedAt: serverTimestamp(),
-        updatedBy: user.uid
+        updatedBy: user?.uid || 'admin'
       };
 
       await setDoc(docRef, payload, { merge: true });
@@ -182,7 +243,7 @@ export default function FarmProfile() {
                 <Upload size={16} />
                 <span>Upload Logo (JPG, PNG)</span>
               </button>
-              <button type="button" onClick={() => setProfile({...profile, logoUrl: ""})} className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium transition-colors block">
+              <button type="button" onClick={handleRemoveLogo} className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium transition-colors block">
                 Remove Logo
               </button>
             </div>

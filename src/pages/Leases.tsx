@@ -9,6 +9,7 @@ import NepaliDate from 'nepali-datetime';
 import { Plus, Trash2, Map, FileText, Edit2, Upload, Loader2, Eye, X } from 'lucide-react';
 import NepaliDatePicker from '../components/NepaliDatePicker';
 import { translations } from '../lib/translations';
+import { compressImage } from '../lib/imageUtils';
 
 export default function Leases() {
   const { farmId, language } = useAppStore();
@@ -40,13 +41,20 @@ export default function Leases() {
     if (!file || !farmId) return;
     setIsUploading(true);
     try {
-      const storageRef = ref(storage, `lease-docs/${farmId}/${file.name}`);
-      await uploadBytes(storageRef, file);
-      const url = await getDownloadURL(storageRef);
-      setFormData({ ...formData, documentUrl: url });
+      if (file.type.startsWith('image/')) {
+        const compressed = await compressImage(file, 1200, 1200, 0.8);
+        setFormData(prev => ({ ...prev, documentUrl: compressed }));
+      } else {
+        // PDF or document
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          setFormData(prev => ({ ...prev, documentUrl: ev.target?.result as string }));
+        };
+        reader.readAsDataURL(file);
+      }
     } catch (err) {
-      console.error(err);
-      alert("Failed to upload document");
+      console.error("Document upload error:", err);
+      alert(language === 'ne' ? "कागजात अपलोड गर्न सकिएन।" : "Failed to upload document");
     } finally {
       setIsUploading(false);
     }

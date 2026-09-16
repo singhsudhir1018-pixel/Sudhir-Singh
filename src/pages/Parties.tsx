@@ -8,6 +8,7 @@ import PartnerLedgerModal from '../components/PartnerLedgerModal';
 import NepaliDate from 'nepali-datetime';
 import { collection, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, doc, writeBatch } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { compressImage } from '../lib/imageUtils';
 import { 
   Users, Briefcase, Plus, Search, Filter, Edit2, Trash2, BookOpen, 
   ArrowUpRight, ArrowDownRight, X, Save, TrendingUp
@@ -100,16 +101,14 @@ export default function Parties() {
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !farmId) return;
+    if (!file) return;
     setIsUploadingPhoto(true);
     try {
-      const storageRef = ref(storage, `partner-photos/${farmId}/${file.name}`);
-      await uploadBytes(storageRef, file);
-      const url = await getDownloadURL(storageRef);
-      setPartnerForm({ ...partnerForm, photoUrl: url });
+      const dataUrl = await compressImage(file, 300, 300, 0.85);
+      setPartnerForm(prev => ({ ...prev, photoUrl: dataUrl }));
     } catch (err) {
-      console.error(err);
-      alert("Failed to upload photo");
+      console.error("Partner photo processing error:", err);
+      alert(language === 'ne' ? "फोटो अपलोड गर्न सकिएन।" : "Failed to process photo.");
     } finally {
       setIsUploadingPhoto(false);
     }
