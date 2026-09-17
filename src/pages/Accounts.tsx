@@ -4,10 +4,10 @@ import { useAppStore } from '../store';
 import { translations } from '../lib/translations';
 import NepaliDate from 'nepali-datetime';
 import NepaliDatePicker from '../components/NepaliDatePicker';
-import { Plus, ArrowRightLeft, Wallet, Landmark, PiggyBank, Search, X, Save, Edit2, Trash2, FileText, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { Plus, ArrowRightLeft, Wallet, Landmark, PiggyBank, Search, X, Save, Edit2, Trash2, FileText, ArrowUpRight, ArrowDownRight, TrendingDown, Briefcase } from 'lucide-react';
 import { collection, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, doc, writeBatch } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { BankAccount, Transfer, Transaction } from '../types';
+import { BankAccount, Transfer, Transaction, Partner } from '../types';
 
 export default function Accounts() {
   const { language, user } = useAppStore();
@@ -17,6 +17,7 @@ export default function Accounts() {
   const [accounts, setAccounts] = useState<BankAccount[]>([]);
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [partners, setPartners] = useState<Partner[]>([]);
 
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -68,12 +69,23 @@ export default function Accounts() {
       setTransactions(data);
     });
 
-    return () => { unsubAcc(); unsubTrans(); unsubTx(); };
+    const unsubPartners = onSnapshot(query(collection(db, 'partners'), where('farmId', '==', farmId)), snap => {
+      const data: Partner[] = [];
+      snap.forEach(d => data.push({ id: d.id, ...d.data() } as Partner));
+      setPartners(data);
+    });
+
+    return () => { unsubAcc(); unsubTrans(); unsubTx(); unsubPartners(); };
   }, [farmId]);
 
-  const totalCash = accounts.filter(a => a.type === 'CASH').reduce((sum, a) => sum + a.currentBalance, 0);
-  const totalBank = accounts.filter(a => a.type === 'BANK' || a.type === 'WALLET').reduce((sum, a) => sum + a.currentBalance, 0);
+  const totalCash = accounts.filter(a => a.type === 'CASH').reduce((sum, a) => sum + (Number(a.currentBalance) || 0), 0);
+  const totalBank = accounts.filter(a => a.type === 'BANK' || a.type === 'WALLET').reduce((sum, a) => sum + (Number(a.currentBalance) || 0), 0);
   const totalLiquidity = totalCash + totalBank;
+
+  // Real-time Total Investment, Total Expense, and remaining Cash & Bank
+  const totalInvestment = partners.reduce((sum, p) => sum + (Number(p.investmentAmount) || 0), 0);
+  const totalExpense = transactions.filter(t => t.type === 'EXPENSE').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+  const remainingCashBank = totalInvestment - totalExpense;
 
   const handleSaveAccount = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -272,29 +284,107 @@ export default function Accounts() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-gradient-to-br from-green-900 to-green-800 p-6 rounded-2xl shadow-sm text-white flex flex-col justify-between">
-          <div className="flex justify-between items-start mb-4">
-            <span className="text-green-100 font-medium">{t.totalLiquidity || 'Total Net Liquidity'}</span>
-            <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center"><Wallet size={20} /></div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Primary Card: Remaining Cash & Bank (Total Investment - Total Expense) */}
+        <div className="bg-gradient-to-br from-emerald-800 to-teal-900 p-6 rounded-2xl shadow-sm text-white flex flex-col justify-between">
+          <div className="flex justify-between items-start mb-3">
+            <div>
+              <span className="text-emerald-100 font-bold text-sm block">
+                {language === 'ne' ? 'कुल मौज्दात (Cash & Bank)' : 'Cash & Bank Balance'}
+              </span>
+              <span className="text-[11px] text-emerald-200/80 font-medium">
+                {language === 'ne' ? 'कुल लगानी - कुल खर्च' : 'Total Investment - Total Expense'}
+              </span>
+            </div>
+            <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center shrink-0">
+              <Wallet size={20} className="text-emerald-100" />
+            </div>
           </div>
-          <div className="text-3xl font-bold">Rs. {totalLiquidity.toLocaleString()}</div>
+          <div>
+            <div className="text-2xl sm:text-3xl font-extrabold text-white">
+              Rs. {remainingCashBank.toLocaleString()}
+            </div>
+            <div className="text-[11px] text-emerald-200/90 mt-1 font-medium truncate" title={`Rs. ${totalInvestment.toLocaleString()} - Rs. ${totalExpense.toLocaleString()}`}>
+              {language === 'ne' 
+                ? `रु. ${totalInvestment.toLocaleString()} - रु. ${totalExpense.toLocaleString()}`
+                : `Rs. ${totalInvestment.toLocaleString()} - Rs. ${totalExpense.toLocaleString()}`}
+            </div>
+          </div>
         </div>
 
+        {/* Card 2: Total Investment */}
         <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm flex flex-col justify-between">
-          <div className="flex justify-between items-start mb-4">
-            <span className="text-stone-500 font-medium">{t.totalCash || 'Total Cash'}</span>
-            <div className="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center text-green-600"><Wallet size={20} /></div>
+          <div className="flex justify-between items-start mb-3">
+            <div>
+              <span className="text-stone-500 font-semibold text-sm block">
+                {t.totalInvestment || 'Total Investment'}
+              </span>
+              <span className="text-[11px] text-stone-400 font-medium">
+                {language === 'ne' ? 'साझेदार तथा लगानीकर्ता' : 'From Partners & Investors'}
+              </span>
+            </div>
+            <div className="w-10 h-10 rounded-full bg-amber-50 flex items-center justify-center text-amber-600 shrink-0">
+              <Briefcase size={20} />
+            </div>
           </div>
-          <div className="text-3xl font-bold text-stone-900">Rs. {totalCash.toLocaleString()}</div>
+          <div>
+            <div className="text-2xl sm:text-3xl font-bold text-stone-900">
+              Rs. {totalInvestment.toLocaleString()}
+            </div>
+            <div className="text-[11px] text-stone-500 mt-1 font-medium">
+              {partners.length} {language === 'ne' ? 'साझेदारहरू' : 'Partners'}
+            </div>
+          </div>
         </div>
 
+        {/* Card 3: Total Expense */}
         <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm flex flex-col justify-between">
-          <div className="flex justify-between items-start mb-4">
-            <span className="text-stone-500 font-medium">{t.totalBank || 'Total Bank & Digital'}</span>
-            <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600"><Landmark size={20} /></div>
+          <div className="flex justify-between items-start mb-3">
+            <div>
+              <span className="text-stone-500 font-semibold text-sm block">
+                {t.totalExpense || 'Total Expense'}
+              </span>
+              <span className="text-[11px] text-stone-400 font-medium">
+                {language === 'ne' ? 'फर्म सञ्चालन तथा खरिद खर्च' : 'All Recorded Expenses'}
+              </span>
+            </div>
+            <div className="w-10 h-10 rounded-full bg-rose-50 flex items-center justify-center text-rose-600 shrink-0">
+              <TrendingDown size={20} />
+            </div>
           </div>
-          <div className="text-3xl font-bold text-stone-900">Rs. {totalBank.toLocaleString()}</div>
+          <div>
+            <div className="text-2xl sm:text-3xl font-bold text-rose-600">
+              Rs. {totalExpense.toLocaleString()}
+            </div>
+            <div className="text-[11px] text-stone-500 mt-1 font-medium">
+              {transactions.filter(t => t.type === 'EXPENSE').length} {language === 'ne' ? 'खर्च कारोबारहरू' : 'Recorded expenses'}
+            </div>
+          </div>
+        </div>
+
+        {/* Card 4: Allocated Bank & Cash Accounts */}
+        <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm flex flex-col justify-between">
+          <div className="flex justify-between items-start mb-3">
+            <div>
+              <span className="text-stone-500 font-semibold text-sm block">
+                {language === 'ne' ? 'खाता मौज्दात' : 'Account Balances'}
+              </span>
+              <span className="text-[11px] text-stone-400 font-medium">
+                {language === 'ne' ? 'नगद र बैंक खाताहरू' : 'Cash in hand & Bank'}
+              </span>
+            </div>
+            <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+              <Landmark size={20} />
+            </div>
+          </div>
+          <div>
+            <div className="text-2xl sm:text-3xl font-bold text-stone-900">
+              Rs. {totalLiquidity.toLocaleString()}
+            </div>
+            <div className="text-[11px] text-stone-500 mt-1 font-medium">
+              Cash: Rs. {totalCash.toLocaleString()} | Bank: Rs. {totalBank.toLocaleString()}
+            </div>
+          </div>
         </div>
       </div>
 

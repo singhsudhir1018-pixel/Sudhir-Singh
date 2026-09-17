@@ -256,10 +256,26 @@ export const translations: Record<string, Record<string, string>> = {
     noContributions: 'No contributions found for this partner.',
     printExport: 'Print / Export',
     cashBankDropdownLabel: '-- Select Account --',
-
-
-
-
+    toReceive: 'To Receive',
+    toReceiveSub: 'Receivables from Parties',
+    toPay: 'To Pay',
+    toPaySub: 'Payables to Suppliers',
+    totalBalanceCashBank: 'Total Balance (Cash & Bank)',
+    totalBalanceSub: 'Liquid Assets in Hand & Bank',
+    cashAndBankBreakdown: 'Cash & Bank Breakdown',
+    cashInHand: 'Cash in Hand',
+    bankAccountsLabel: 'Bank Accounts',
+    digitalWalletsLabel: 'Digital Wallets',
+    youWillGet: "You'll Get",
+    youWillGive: "You'll Give",
+    settled: 'Settled',
+    manageAccounts: 'Manage Accounts',
+    partyKhata: 'Party Khata Ledger',
+    recordSettlement: 'Settle / Record Payment',
+    noActiveAccounts: 'No active liquidity accounts found',
+    fromBuyers: 'From Buyers',
+    toSuppliers: 'To Suppliers',
+    acrossAccounts: 'Across active accounts',
   },
   ne: {
     appTitle: 'कृषि फर्म व्यवस्थापन',
@@ -515,9 +531,25 @@ export const translations: Record<string, Record<string, string>> = {
     noContributions: 'यस साझेदारको कुनै लगानी रेकर्ड भेटिएन।',
     printExport: 'प्रिन्ट / निकाल्नुहोस्',
     cashBankDropdownLabel: '-- खाता छान्नुहोस् --',
-
-
-
-
+    toReceive: 'उठाउन बाँकी',
+    toReceiveSub: 'क्रेता/पार्टीबाट लिनुपर्ने',
+    toPay: 'तिर्न बाँकी',
+    toPaySub: 'आपूर्तिकर्तालाई दिनुपर्ने',
+    totalBalanceCashBank: 'कुल मौज्दात (नगद र बैंक)',
+    totalBalanceSub: 'हातमा र बैंकमा रहेको रकम',
+    cashAndBankBreakdown: 'नगद तथा बैंक खाता विवरण',
+    cashInHand: 'हातमा रहेको नगद (Cash Box)',
+    bankAccountsLabel: 'बैंक खाताहरू (Bank Accounts)',
+    digitalWalletsLabel: 'डिजिटल वालेटहरू (eSewa, Khalti)',
+    youWillGet: 'लिन बाँकी',
+    youWillGive: 'दिन बाँकी',
+    settled: 'हिसाब चुक्ता',
+    manageAccounts: 'खाता व्यवस्थापन',
+    partyKhata: 'पार्टी खाता तथा हिसाब',
+    recordSettlement: 'हिसाब मिलान / भुक्तानी',
+    noActiveAccounts: 'कुनै सक्रिय खाता फेला परेन',
+    fromBuyers: 'क्रेताहरूबाट',
+    toSuppliers: 'आपूर्तिकर्ताहरूलाई',
+    acrossAccounts: 'सक्रिय खाताहरूमा',
   }
 };

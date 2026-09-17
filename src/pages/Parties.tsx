@@ -5,6 +5,8 @@ import { translations } from '../lib/translations';
 import { Party, Partner, BankAccount } from '../types';
 import AddContributionModal from '../components/AddContributionModal';
 import PartnerLedgerModal from '../components/PartnerLedgerModal';
+import FinancialSummaryHeader from '../components/FinancialSummaryHeader';
+import PartyKhataModal from '../components/PartyKhataModal';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import NepaliDate from 'nepali-datetime';
 import { collection, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, doc, writeBatch } from 'firebase/firestore';
@@ -12,7 +14,7 @@ import { db } from '../lib/firebase';
 import { compressImage } from '../lib/imageUtils';
 import { 
   Users, Briefcase, Plus, Search, Filter, Edit2, Trash2, BookOpen, 
-  ArrowUpRight, ArrowDownRight, X, Save, TrendingUp, Upload, Loader2
+  ArrowUpRight, ArrowDownRight, ArrowDownLeft, CheckCircle2, X, Save, TrendingUp, Upload, Loader2
 } from 'lucide-react';
 
 export default function Parties() {
@@ -34,6 +36,7 @@ export default function Parties() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedPartnerForContrib, setSelectedPartnerForContrib] = useState<Partner | null>(null);
   const [selectedPartnerForLedger, setSelectedPartnerForLedger] = useState<Partner | null>(null);
+  const [selectedPartyForKhata, setSelectedPartyForKhata] = useState<Party | null>(null);
 
   const initialParty = { name: '', type: 'BUYER' as const, phone: '', address: '', panVat: '', pendingBalance: 0 };
   const initialPartner = { name: '', investmentAmount: 0, profitSharePercentage: 0, phone: '', joiningDateBS: new NepaliDate().format('YYYY MMMM DD'), dividendPayable: 0, accountId: '', paymentMethod: 'CASH', email: '', address: '', photoUrl: '' };
@@ -226,6 +229,12 @@ export default function Parties() {
         <h1 className="text-2xl font-bold text-stone-800">{t.parties}</h1>
       </div>
 
+      {/* Financial Summary Overview Header */}
+      <FinancialSummaryHeader 
+        onSelectReceivables={() => { setActiveTab('PARTIES'); setFilterType('BUYER'); }}
+        onSelectPayables={() => { setActiveTab('PARTIES'); setFilterType('SUPPLIER'); }}
+      />
+
       <div className="flex border-b border-stone-200 space-x-6">
         <button
           onClick={() => setActiveTab('PARTIES')}
@@ -249,29 +258,6 @@ export default function Parties() {
 
       {activeTab === 'PARTIES' && (
         <div className="space-y-6 animate-in fade-in duration-300">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm flex flex-col justify-between">
-              <div className="flex justify-between items-start mb-4">
-                <span className="text-stone-500 font-medium">{t.totalReceivables}</span>
-                <div className="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center text-green-600"><ArrowUpRight size={20} /></div>
-              </div>
-              <div>
-                <div className="text-3xl font-bold text-stone-900">Rs. {totalReceivables.toLocaleString()}</div>
-                <p className="text-sm text-green-600 mt-2">From {parties.filter(p => p.type === 'BUYER').length} Buyers</p>
-              </div>
-            </div>
-
-            <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm flex flex-col justify-between">
-              <div className="flex justify-between items-start mb-4">
-                <span className="text-stone-500 font-medium">{t.totalPayables}</span>
-                <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center text-red-600"><ArrowDownRight size={20} /></div>
-              </div>
-              <div>
-                <div className="text-3xl font-bold text-stone-900">Rs. {totalPayables.toLocaleString()}</div>
-                <p className="text-sm text-red-600 mt-2">To {parties.filter(p => p.type === 'SUPPLIER').length} Suppliers</p>
-              </div>
-            </div>
-          </div>
 
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white p-4 rounded-2xl border border-stone-200 shadow-sm">
             <div className="flex w-full sm:w-auto items-center space-x-4">
@@ -343,12 +329,47 @@ export default function Parties() {
 
                 <div className="pt-4 border-t border-stone-100 flex items-center justify-between">
                   <div>
-                    <p className="text-xs text-stone-500 font-medium mb-1">Khata Balance</p>
-                    <p className={`font-bold text-lg ${party.type === 'BUYER' ? 'text-green-600' : 'text-red-600'}`}>
-                      Rs. {party.pendingBalance.toLocaleString()}
+                    <p className="text-xs text-stone-500 font-medium mb-1">
+                      {language === 'ne' ? 'खाता स्थिति (Khata Status)' : 'Khata Status'}
                     </p>
+                    {party.type === 'BUYER' ? (
+                      party.pendingBalance > 0 ? (
+                        <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          <ArrowDownLeft size={12} className="stroke-[2.5]" />
+                          <span>{language === 'ne' ? 'लिन बाँकी' : "You'll Get"}: Rs. {party.pendingBalance.toLocaleString()}</span>
+                        </span>
+                      ) : party.pendingBalance === 0 ? (
+                        <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-stone-100 text-stone-600 border border-stone-200">
+                          <CheckCircle2 size={12} />
+                          <span>{t.settled || 'Settled'}</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                          <span>{language === 'ne' ? 'अग्रिम प्राप्त' : 'Advance'}: Rs. {Math.abs(party.pendingBalance).toLocaleString()}</span>
+                        </span>
+                      )
+                    ) : (
+                      party.pendingBalance > 0 ? (
+                        <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                          <ArrowUpRight size={12} className="stroke-[2.5]" />
+                          <span>{language === 'ne' ? 'दिन बाँकी' : "You'll Give"}: Rs. {party.pendingBalance.toLocaleString()}</span>
+                        </span>
+                      ) : party.pendingBalance === 0 ? (
+                        <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-stone-100 text-stone-600 border border-stone-200">
+                          <CheckCircle2 size={12} />
+                          <span>{t.settled || 'Settled'}</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          <span>{language === 'ne' ? 'अग्रिम भुक्तान' : 'Advance Paid'}: Rs. {Math.abs(party.pendingBalance).toLocaleString()}</span>
+                        </span>
+                      )
+                    )}
                   </div>
-                  <button className="flex items-center space-x-1 text-sm font-medium text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors">
+                  <button 
+                    onClick={() => setSelectedPartyForKhata(party)}
+                    className="flex items-center space-x-1.5 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200/80 px-3 py-2 rounded-xl transition-colors shadow-xs active:scale-98"
+                  >
                     <BookOpen size={14} />
                     <span>{t.viewKhata}</span>
                   </button>
@@ -615,6 +636,13 @@ export default function Parties() {
           partner={selectedPartnerForLedger}
           isOpen={true}
           onClose={() => setSelectedPartnerForLedger(null)}
+        />
+      )}
+      {selectedPartyForKhata && (
+        <PartyKhataModal
+          party={selectedPartyForKhata}
+          isOpen={true}
+          onClose={() => setSelectedPartyForKhata(null)}
         />
       )}
     </div>
