@@ -203,8 +203,9 @@ export interface PartnerContribution {
   targetAccountId: string;
   paymentMethod: string;
   notes: string;
+  transactionId?: string;
   createdAt: number;
-  createdBy: string;
+  createdBy?: string;
 }
 
 export interface SubCategory {

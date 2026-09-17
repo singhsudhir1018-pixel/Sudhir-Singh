@@ -634,6 +634,7 @@ export default function Parties() {
       {selectedPartnerForLedger && (
         <PartnerLedgerModal
           partner={selectedPartnerForLedger}
+          accounts={accounts}
           isOpen={true}
           onClose={() => setSelectedPartnerForLedger(null)}
         />

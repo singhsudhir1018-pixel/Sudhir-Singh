@@ -57,6 +57,8 @@ export default function AddContributionModal({ partner, accounts, isOpen, onClos
 
         // 3. Record Contribution History
         const contributionRef = doc(collection(db, 'partnerContributions'));
+        const txRef = doc(collection(db, 'transactions'));
+
         transaction.set(contributionRef, {
           farmId,
           partnerId: partner.id,
@@ -66,11 +68,11 @@ export default function AddContributionModal({ partner, accounts, isOpen, onClos
           targetAccountId: accountId,
           paymentMethod,
           notes,
+          transactionId: txRef.id,
           createdAt: Date.now()
         });
 
         // 4. Record as CAPITAL_INFLOW in the main transactions ledger
-        const txRef = doc(collection(db, 'transactions'));
         transaction.set(txRef, {
           farmId,
           type: 'CAPITAL_INFLOW',
@@ -81,6 +83,7 @@ export default function AddContributionModal({ partner, accounts, isOpen, onClos
           paymentMethod,
           dateBS,
           notes: notes || `Capital Contribution by ${partner.name}`,
+          contributionId: contributionRef.id,
           createdAt: Date.now(),
         });
       });
