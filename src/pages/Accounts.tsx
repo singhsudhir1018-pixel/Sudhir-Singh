@@ -78,14 +78,21 @@ export default function Accounts() {
     return () => { unsubAcc(); unsubTrans(); unsubTx(); unsubPartners(); };
   }, [farmId]);
 
-  const totalCash = accounts.filter(a => a.type === 'CASH').reduce((sum, a) => sum + (Number(a.currentBalance) || 0), 0);
-  const totalBank = accounts.filter(a => a.type === 'BANK' || a.type === 'WALLET').reduce((sum, a) => sum + (Number(a.currentBalance) || 0), 0);
-  const totalLiquidity = totalCash + totalBank;
-
   // Real-time Total Investment, Total Expense, and remaining Cash & Bank
   const totalInvestment = partners.reduce((sum, p) => sum + (Number(p.investmentAmount) || 0), 0);
   const totalExpense = transactions.filter(t => t.type === 'EXPENSE').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
   const remainingCashBank = totalInvestment - totalExpense;
+
+  const totalBank = accounts.filter(a => a.type === 'BANK' || a.type === 'WALLET').reduce((sum, a) => sum + Math.max(0, Number(a.currentBalance) || 0), 0);
+  const totalCash = remainingCashBank - totalBank;
+  const totalLiquidity = remainingCashBank;
+
+  const getDisplayBalance = (acc: BankAccount) => {
+    if (acc.type === 'CASH') {
+      return totalCash;
+    }
+    return Math.max(0, Number(acc.currentBalance) || 0);
+  };
 
   const handleSaveAccount = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -426,7 +433,7 @@ export default function Accounts() {
               <div>
                 <p className="text-xs text-stone-500 font-medium mb-1">{t.currentBalance || 'Current Balance'}</p>
                 <p className="font-bold text-2xl text-stone-900">
-                  Rs. {acc.currentBalance.toLocaleString()}
+                  Rs. {getDisplayBalance(acc).toLocaleString()}
                 </p>
               </div>
               <div className="text-stone-300 group-hover:text-green-600 transition-colors">

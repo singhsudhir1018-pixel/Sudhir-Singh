@@ -6,6 +6,7 @@ import {
   Map as MapIcon, UserCircle, CheckSquare, Briefcase, Sparkles, Activity
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import CashBankBalanceCard from '../components/CashBankBalanceCard';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Transaction, InventoryItem, Lease, Employee, Task, Partner } from '../types';
@@ -152,10 +153,13 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6 pb-20 lg:pb-8">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-stone-800 tracking-tight">{t.dashboard}</h1>
           <p className="text-stone-500 text-sm mt-1">Here's your farm's performance today.</p>
+        </div>
+        <div className="w-full md:w-80 lg:w-96 shrink-0">
+          <CashBankBalanceCard dropdownAlign="right" />
         </div>
       </div>
 

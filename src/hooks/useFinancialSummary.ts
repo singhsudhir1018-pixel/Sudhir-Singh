@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { useState, useEffect, useRef } from 'react';
+import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAppStore } from '../store';
 import { Party, BankAccount, Partner, Transaction } from '../types';
@@ -174,14 +174,8 @@ export function useFinancialSummary(overrideFarmId?: string): FinancialSummaryDa
   });
 
   const activeAccounts = accounts.filter((a) => a.status !== 'INACTIVE');
-  const cashAccounts = activeAccounts.filter((a) => a.type === 'CASH');
   const bankAccounts = activeAccounts.filter((a) => a.type === 'BANK');
   const walletAccounts = activeAccounts.filter((a) => a.type === 'WALLET');
-
-  const totalCash = cashAccounts.reduce((sum, a) => sum + (Number(a.currentBalance) || 0), 0);
-  const totalBank = bankAccounts.reduce((sum, a) => sum + (Number(a.currentBalance) || 0), 0);
-  const totalWallet = walletAccounts.reduce((sum, a) => sum + (Number(a.currentBalance) || 0), 0);
-  const accountLiquidity = totalCash + totalBank + totalWallet;
 
   // Real-time Total Investment and Total Expense
   const totalInvestment = partners.reduce((sum, p) => sum + (Number(p.investmentAmount) || 0), 0);
@@ -191,6 +185,44 @@ export function useFinancialSummary(overrideFarmId?: string): FinancialSummaryDa
 
   // Cash & Bank balance: Total Investment - Total Expense
   const totalCashBankBalance = totalInvestment - totalExpense;
+
+  // Tracked balances in Bank and Wallet accounts
+  const totalBank = bankAccounts.reduce((sum, a) => sum + Math.max(0, Number(a.currentBalance) || 0), 0);
+  const totalWallet = walletAccounts.reduce((sum, a) => sum + Math.max(0, Number(a.currentBalance) || 0), 0);
+
+  // The true remaining Cash balance is the net liquid funds after bank and wallet holdings:
+  // e.g., if Remaining Balance is 13,185 and bank/wallet are 0, Cash is 13,185.
+  const totalCash = totalCashBankBalance - (totalBank + totalWallet);
+  const accountLiquidity = totalCashBankBalance;
+
+  // Map accounts so Cash accounts reflect the actual available cash balance rather than negative artifacts
+  const displayAccounts = activeAccounts.map((a) => {
+    if (a.type === 'CASH') {
+      return {
+        ...a,
+        currentBalance: totalCash,
+      };
+    }
+    return {
+      ...a,
+      currentBalance: Math.max(0, Number(a.currentBalance) || 0),
+    };
+  });
+
+  const displayCashAccounts = displayAccounts.filter((a) => a.type === 'CASH');
+
+  // Auto-heal negative cash accounts in Firestore so database documents remain clean
+  const syncedRef = useRef<string>('');
+  useEffect(() => {
+    if (loading || !farmId || activeAccounts.length === 0) return;
+    const negCashAcc = activeAccounts.find(a => a.type === 'CASH' && (Number(a.currentBalance) || 0) < 0);
+    if (negCashAcc && syncedRef.current !== `${negCashAcc.id}_${totalCash}`) {
+      syncedRef.current = `${negCashAcc.id}_${totalCash}`;
+      updateDoc(doc(db, 'bankAccounts', negCashAcc.id), {
+        currentBalance: totalCash
+      }).catch(err => console.error("Auto-sync cash balance:", err));
+    }
+  }, [loading, farmId, activeAccounts, totalCash]);
 
   return {
     toReceive,
@@ -204,8 +236,8 @@ export function useFinancialSummary(overrideFarmId?: string): FinancialSummaryDa
     totalWallet,
     buyerCount,
     supplierCount,
-    accounts: activeAccounts,
-    cashAccounts,
+    accounts: displayAccounts,
+    cashAccounts: displayCashAccounts,
     bankAccounts,
     walletAccounts,
     parties,
