@@ -7,6 +7,7 @@ import { Transaction, Partner, Party, BankAccount } from '../types';
 import { PieChart, TrendingUp, TrendingDown, DollarSign, Download, Printer, Eye, Edit2, Trash2, FileText, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { translations } from '../lib/translations';
+import { sortTransactionsDesc } from '../lib/nepaliDateHelper';
 
 export default function Finance() {
   const { farmId, language } = useAppStore();
@@ -26,8 +27,8 @@ export default function Finance() {
       const data: Transaction[] = [];
       snap.forEach(d => data.push({ id: d.id, ...d.data() } as Transaction));
       
-      // Sort by dateBS descending
-      data.sort((a, b) => b.dateBS.localeCompare(a.dateBS));
+      // Sort by dateBS descending (latest date first)
+      data.sort(sortTransactionsDesc);
       setTransactions(data);
     });
     
@@ -57,7 +58,61 @@ export default function Finance() {
   const netProfit = totalIncome - totalExpense;
   const totalCapital = partners.reduce((sum, p) => sum + p.investmentAmount, 0);
 
-  const getPartyName = (id?: string) => parties.find(p => p.id === id)?.name || '-';
+  const getPartyOrPartnerInfo = (tx: Transaction) => {
+    if (tx.partyId) {
+      const party = parties.find(p => p.id === tx.partyId);
+      if (party) {
+        return {
+          name: party.name,
+          badgeLabel: party.type === 'BUYER' ? (language === 'ne' ? 'क्रेता' : 'Buyer') : (language === 'ne' ? 'आपूर्तिकर्ता' : 'Supplier'),
+          badgeColor: party.type === 'BUYER' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-amber-50 text-amber-700 border-amber-200',
+          isPartner: false,
+        };
+      }
+      const partner = partners.find(p => p.id === tx.partyId);
+      if (partner) {
+        return {
+          name: partner.name,
+          badgeLabel: language === 'ne' ? 'साझेदार' : 'Partner',
+          badgeColor: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+          isPartner: true,
+        };
+      }
+    }
+    if (tx.type === 'CAPITAL_INFLOW' || tx.category?.toLowerCase().includes('partner') || tx.category?.toLowerCase().includes('capital')) {
+      const matchedPartner = partners.find(p => tx.notes?.toLowerCase().includes(p.name.toLowerCase()));
+      if (matchedPartner) {
+        return {
+          name: matchedPartner.name,
+          badgeLabel: language === 'ne' ? 'साझेदार' : 'Partner',
+          badgeColor: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+          isPartner: true,
+        };
+      }
+    }
+    if (tx.notes) {
+      const matchedParty = parties.find(p => p.name && tx.notes?.toLowerCase().includes(p.name.toLowerCase()));
+      if (matchedParty) {
+        return {
+          name: matchedParty.name,
+          badgeLabel: matchedParty.type === 'BUYER' ? (language === 'ne' ? 'क्रेता' : 'Buyer') : (language === 'ne' ? 'आपूर्तिकर्ता' : 'Supplier'),
+          badgeColor: matchedParty.type === 'BUYER' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-amber-50 text-amber-700 border-amber-200',
+          isPartner: false,
+        };
+      }
+    }
+    return null;
+  };
+
+  const getPartyName = (id?: string) => {
+    if (!id) return '-';
+    const party = parties.find(p => p.id === id);
+    if (party) return party.name;
+    const partner = partners.find(p => p.id === id);
+    if (partner) return partner.name;
+    return '-';
+  };
+
   const getAccountName = (id?: string, method?: string) => {
     const acc = accounts.find(a => a.id === id);
     if (acc) return acc.name;
@@ -69,7 +124,7 @@ export default function Finance() {
     let csv = "S.N.,Date,Type,Sub Category,Party/Partner,Payment Account,Amount,Notes\n";
     transactions.forEach((tx, idx) => {
       const subCat = tx.subCategory || tx.category;
-      const party = getPartyName(tx.partyId);
+      const party = getPartyOrPartnerInfo(tx)?.name || getPartyName(tx.partyId);
       const acc = getAccountName(tx.accountId, tx.paymentMethod);
       csv += `${idx + 1},${tx.dateBS},${tx.type},"${subCat}","${party}","${acc}",${tx.amount},"${(tx.notes || '').replace(/"/g, '""')}"\n`;
     });
@@ -192,7 +247,7 @@ export default function Finance() {
                 <th className="p-4">{t.dateBS}</th>
                 <th className="p-4">{t.type}</th>
                 <th className="p-4">{language === 'ne' ? 'उप-वर्ग' : 'Sub-Category'}</th>
-                <th className="p-4">{t.party}</th>
+                <th className="p-4">{t.partyOrPartner || 'Party / Partner'}</th>
                 <th className="p-4">{language === 'ne' ? 'खाता' : 'Account'}</th>
                 <th className="p-4 text-right">{t.amount}</th>
                 <th className="p-4 text-center print:hidden">{t.actions || 'Actions'}</th>
@@ -216,7 +271,20 @@ export default function Finance() {
                       <td className="p-4 text-stone-800 font-medium">
                         {tx.subCategory || tx.category}
                       </td>
-                      <td className="p-4 text-stone-600">{getPartyName(tx.partyId)}</td>
+                      <td className="p-4 text-stone-700">
+                        {(() => {
+                          const info = getPartyOrPartnerInfo(tx);
+                          if (!info) return <span className="text-stone-400 font-normal">-</span>;
+                          return (
+                            <div className="flex items-center space-x-2">
+                              <span className="font-semibold text-stone-900">{info.name}</span>
+                              <span className={`text-[11px] px-2 py-0.5 rounded-md border font-medium whitespace-nowrap ${info.badgeColor}`}>
+                                {info.badgeLabel}
+                              </span>
+                            </div>
+                          );
+                        })()}
+                      </td>
                       <td className="p-4 text-stone-600">
                         {getAccountName(tx.accountId, tx.paymentMethod)}
                       </td>
@@ -285,12 +353,23 @@ export default function Finance() {
                 <span className="text-stone-500">Payment Account</span>
                 <span className="font-medium text-stone-800">{getAccountName(previewTx.accountId, previewTx.paymentMethod)}</span>
               </div>
-              {previewTx.partyId && (
-                <div className="flex justify-between pb-3 border-b border-stone-100">
-                  <span className="text-stone-500">Party</span>
-                  <span className="font-medium text-stone-800">{getPartyName(previewTx.partyId)}</span>
-                </div>
-              )}
+              {(() => {
+                const info = getPartyOrPartnerInfo(previewTx);
+                if (!info && !previewTx.partyId) return null;
+                return (
+                  <div className="flex justify-between items-center pb-3 border-b border-stone-100">
+                    <span className="text-stone-500">{t.partyOrPartner || 'Party / Partner'}</span>
+                    <div className="flex items-center space-x-2">
+                      <span className="font-semibold text-stone-900">{info ? info.name : getPartyName(previewTx.partyId)}</span>
+                      {info && (
+                        <span className={`text-[11px] px-2 py-0.5 rounded-md border font-medium ${info.badgeColor}`}>
+                          {info.badgeLabel}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
               {previewTx.notes && (
                 <div className="pt-2">
                   <span className="block text-stone-500 text-sm mb-1">Remarks/Notes</span>

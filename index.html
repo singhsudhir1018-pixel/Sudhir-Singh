@@ -6,19 +6,25 @@
     <script>
       // Filter out benign Vite HMR websocket logs in sandboxed preview
       (function() {
+        const isViteLog = (arg) => {
+          if (!arg) return false;
+          const str = typeof arg === 'string' ? arg : (arg.message || String(arg));
+          return str.includes('[vite]') || str.includes('WebSocket') || str.includes('ws://') || str.includes('wss://');
+        };
         const origError = console.error;
         console.error = function(...args) {
-          if (args.length > 0 && typeof args[0] === 'string' && args[0].includes('[vite]')) {
-            return;
-          }
+          if (args.some(isViteLog)) return;
           return origError.apply(console, args);
         };
         const origWarn = console.warn;
         console.warn = function(...args) {
-          if (args.length > 0 && typeof args[0] === 'string' && args[0].includes('[vite]')) {
-            return;
-          }
+          if (args.some(isViteLog)) return;
           return origWarn.apply(console, args);
+        };
+        const origLog = console.log;
+        console.log = function(...args) {
+          if (args.some(isViteLog)) return;
+          return origLog.apply(console, args);
         };
       })();
     </script>

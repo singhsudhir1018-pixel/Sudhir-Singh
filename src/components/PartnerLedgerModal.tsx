@@ -10,6 +10,7 @@ import {
   X, FileText, Edit2, Trash2, Save, AlertTriangle, Wallet, Landmark, Loader2, ArrowRight
 } from 'lucide-react';
 import NepaliDatePicker from './NepaliDatePicker';
+import { sortTransactionsDesc } from '../lib/nepaliDateHelper';
 
 interface Props {
   partner: Partner;
@@ -78,8 +79,8 @@ export default function PartnerLedgerModal({ partner, accounts: initialAccounts,
       (snap) => {
         const data: PartnerContribution[] = [];
         snap.forEach((d) => data.push({ id: d.id, ...d.data() } as PartnerContribution));
-        // Sort newest first
-        data.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        // Sort newest dateBS first, then newest createdAt
+        data.sort(sortTransactionsDesc);
         setContributions(data);
         setLoading(false);
       },

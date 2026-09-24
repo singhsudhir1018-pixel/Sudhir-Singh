@@ -19,6 +19,7 @@ import { translations } from '../lib/translations';
 import { collection, query, where, onSnapshot, runTransaction, doc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import NepaliDate from 'nepali-datetime';
+import { sortTransactionsDesc } from '../lib/nepaliDateHelper';
 
 interface Props {
   party: Party | null;
@@ -63,7 +64,7 @@ export default function PartyKhataModal({ party, isOpen, onClose }: Props) {
         snap.forEach((d) => {
           list.push({ id: d.id, ...d.data() } as Transaction);
         });
-        list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        list.sort(sortTransactionsDesc);
         setTransactions(list);
         setLoading(false);
       },

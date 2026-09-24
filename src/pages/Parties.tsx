@@ -165,6 +165,7 @@ export default function Parties() {
           type: 'CAPITAL_INFLOW',
           amount: pAmt,
           category: 'Partner Capital',
+          partyId: newPartnerRef.id,
           accountId: partnerForm.accountId,
           paymentMethod: partnerForm.paymentMethod,
           dateBS: partnerForm.joiningDateBS,

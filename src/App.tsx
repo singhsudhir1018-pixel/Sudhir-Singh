@@ -5,6 +5,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from './lib/firebase';
 import { useAppStore } from './store';
+import { nativeMobileService } from './services/nativeMobileService';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Transactions from './pages/Transactions';
@@ -22,7 +23,12 @@ export default function App() {
   const { user, setUser, setFarmId } = useAppStore();
   const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
+  useEffect(() => {
+    // Initialize native mobile integrations (StatusBar, Back Button, Local Notifications)
+    nativeMobileService.initNativeFeatures();
+  }, []);
+
+  useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       // Don't overwrite if we are using the dummy user in UI preview mode
       if (auth.app.options.apiKey === 'dummy-key' && useAppStore.getState().user?.uid === 'dummy') {

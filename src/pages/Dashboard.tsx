@@ -153,13 +153,10 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6 pb-20 lg:pb-8">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-stone-800 tracking-tight">{t.dashboard}</h1>
           <p className="text-stone-500 text-sm mt-1">Here's your farm's performance today.</p>
-        </div>
-        <div className="w-full md:w-80 lg:w-96 shrink-0">
-          <CashBankBalanceCard dropdownAlign="right" />
         </div>
       </div>
 
@@ -194,7 +191,7 @@ export default function Dashboard() {
         </div>
       </motion.div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         {[
           { label: t.totalInvestment || 'Total Investment', value: `Rs. ${metrics.totalInvestment.toLocaleString()}`, icon: Briefcase, color: 'text-amber-600', bg: 'bg-amber-100/50', border: 'border-amber-200' },
           { label: t.totalIncome || 'Total Income', value: `Rs. ${metrics.totalIncome.toLocaleString()}`, icon: TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-100/50', border: 'border-emerald-200' },
@@ -207,19 +204,30 @@ export default function Dashboard() {
             animate="visible"
             variants={cardVariants}
             key={i}
-            className="group bg-white/80 backdrop-blur-xl p-6 rounded-3xl border border-stone-200/60 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col relative overflow-hidden"
+            className="group bg-white/80 backdrop-blur-xl p-4.5 sm:p-5 rounded-2xl border border-stone-200/60 shadow-xs hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 flex flex-col justify-between relative overflow-hidden"
           >
-            <div className="flex items-center justify-between mb-4 relative z-10">
-              <span className="text-stone-500 font-semibold text-sm tracking-wide">{metric.label}</span>
-              <div className={`w-12 h-12 rounded-2xl ${metric.bg} ${metric.border} border flex items-center justify-center ${metric.color} group-hover:scale-110 transition-transform duration-300`}>
-                <metric.icon size={22} strokeWidth={2.5} />
+            <div className="flex items-center justify-between mb-3 relative z-10">
+              <span className="text-stone-500 font-semibold text-xs tracking-wide">{metric.label}</span>
+              <div className={`w-10 h-10 rounded-xl ${metric.bg} ${metric.border} border flex items-center justify-center ${metric.color} group-hover:scale-105 transition-transform duration-300`}>
+                <metric.icon size={18} strokeWidth={2.5} />
               </div>
             </div>
-            <div className="text-2xl sm:text-3xl font-extrabold text-stone-800 tracking-tight relative z-10">
+            <div className="text-xl sm:text-2xl font-extrabold text-stone-800 tracking-tight relative z-10">
               {metric.value}
             </div>
           </motion.div>
         ))}
+
+        {/* 5th Card: Total Balance (Cash & Bank) right next to Net Profit */}
+        <motion.div
+          custom={4}
+          initial="hidden"
+          animate="visible"
+          variants={cardVariants}
+          className="h-full"
+        >
+          <CashBankBalanceCard compact={true} dropdownAlign="right" />
+        </motion.div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

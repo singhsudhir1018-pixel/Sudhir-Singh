@@ -18,9 +18,10 @@ import { Link } from 'react-router-dom';
 interface Props {
   className?: string;
   dropdownAlign?: 'left' | 'right';
+  compact?: boolean;
 }
 
-export default function CashBankBalanceCard({ className = '', dropdownAlign = 'right' }: Props) {
+export default function CashBankBalanceCard({ className = '', dropdownAlign = 'right', compact = false }: Props) {
   const { language } = useAppStore();
   const t = translations[language];
   const summary = useFinancialSummary();
@@ -70,45 +71,47 @@ export default function CashBankBalanceCard({ className = '', dropdownAlign = 'r
   };
 
   return (
-    <div ref={dropdownRef} className={`relative ${className}`}>
+    <div ref={dropdownRef} className={`relative h-full ${className}`}>
       <div 
         onClick={() => setIsDropdownOpen(prev => !prev)}
         role="button"
         tabIndex={0}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setIsDropdownOpen(prev => !prev); }}
-        className={`bg-gradient-to-br from-emerald-50/95 via-teal-50/80 to-emerald-100/50 border border-emerald-200/90 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group flex flex-col justify-between ${
+        className={`bg-gradient-to-br from-emerald-50/95 via-teal-50/80 to-emerald-100/50 border border-emerald-200/90 rounded-2xl ${
+          compact ? 'p-4 sm:p-4.5' : 'p-5'
+        } shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group h-full flex flex-col justify-between ${
           isDropdownOpen ? 'ring-2 ring-emerald-500/50 border-emerald-400' : ''
         }`}
       >
-        <div className="flex items-center justify-between mb-3">
+        <div className={`flex items-center justify-between ${compact ? 'mb-2' : 'mb-3'}`}>
           <div className="flex flex-col">
             <span className="text-xs font-bold uppercase tracking-wider text-emerald-800">
               {t.totalBalanceCashBank || 'Total Balance (Cash & Bank)'}
             </span>
-            <span className="text-[11px] text-emerald-700/80 font-medium">
+            <span className="text-[10px] text-emerald-700/80 font-medium">
               {language === 'ne' ? 'कुल मौज्दात (नगद र बैंक)' : 'Total Liquid Balance'}
             </span>
           </div>
-          <div className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-600/10 text-emerald-800 border border-emerald-300/60 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
-            <Wallet size={16} />
-            {isDropdownOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          <div className="flex items-center space-x-1.5 px-2 py-1 rounded-xl bg-emerald-600/10 text-emerald-800 border border-emerald-300/60 group-hover:bg-emerald-600 group-hover:text-white transition-colors shrink-0 ml-1">
+            <Wallet size={15} />
+            {isDropdownOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
           </div>
         </div>
 
         <div className="mt-1">
-          <div className="text-2xl sm:text-3xl font-extrabold text-emerald-950 tracking-tight">
+          <div className={`${compact ? 'text-xl sm:text-2xl' : 'text-2xl sm:text-3xl'} font-extrabold text-emerald-950 tracking-tight`}>
             Rs. {summary.totalCashBankBalance.toLocaleString()}
           </div>
-          <div className="flex items-center justify-between text-xs text-emerald-800/80 mt-1 font-medium">
-            <span className="truncate max-w-[210px]" title={`Investment Rs. ${summary.totalInvestment.toLocaleString()} - Expense Rs. ${summary.totalExpense.toLocaleString()}`}>
+          <div className="flex items-center justify-between text-[11px] text-emerald-800/80 mt-1 font-medium">
+            <span className="truncate max-w-[160px] sm:max-w-[190px]" title={`Investment Rs. ${summary.totalInvestment.toLocaleString()} - Expense Rs. ${summary.totalExpense.toLocaleString()}`}>
               {language === 'ne' 
                 ? `लगानी रु. ${summary.totalInvestment.toLocaleString()} - खर्च रु. ${summary.totalExpense.toLocaleString()}`
                 : `Inv. Rs. ${summary.totalInvestment.toLocaleString()} - Exp. Rs. ${summary.totalExpense.toLocaleString()}`}
             </span>
             <span className="underline decoration-emerald-400/60 underline-offset-2 ml-1 shrink-0">
               {isDropdownOpen 
-                ? (language === 'ne' ? 'बन्द गर्नुहोस्' : 'Close') 
-                : (language === 'ne' ? 'खाता विवरण ▼' : 'Breakdown ▼')}
+                ? (language === 'ne' ? 'बन्द' : 'Close') 
+                : (language === 'ne' ? 'विवरण ▼' : 'Breakdown ▼')}
             </span>
           </div>
         </div>

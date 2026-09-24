@@ -8,6 +8,7 @@ import { Plus, ArrowRightLeft, Wallet, Landmark, PiggyBank, Search, X, Save, Edi
 import { collection, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, doc, writeBatch } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { BankAccount, Transfer, Transaction, Partner } from '../types';
+import { sortTransactionsAsc, sortTransactionsDesc } from '../lib/nepaliDateHelper';
 
 export default function Accounts() {
   const { language, user } = useAppStore();
@@ -253,7 +254,7 @@ export default function Accounts() {
       });
     });
     
-    items.sort((a, b) => a.ts - b.ts); // Chronological
+    items.sort(sortTransactionsAsc); // Chronological by dateBS
     
     let runBal = acc.initialBalance;
     items = items.map(item => {
@@ -261,7 +262,7 @@ export default function Accounts() {
       return { ...item, balance: runBal };
     });
     
-    items.sort((a, b) => b.ts - a.ts); // Reverse Chrono for display
+    items.sort(sortTransactionsDesc); // Reverse Chrono (latest dateBS first) for display
     
     const totalIn = items.reduce((s, i) => s + i.inflow, 0);
     const totalOut = items.reduce((s, i) => s + i.outflow, 0);
