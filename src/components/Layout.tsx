@@ -9,7 +9,8 @@ import { translations } from '../lib/translations';
 import { 
   LayoutDashboard, Receipt, Package, Settings as SettingsIcon, LogOut, 
   Languages, Users, Map as MapIcon, UserCircle, CheckSquare, PieChart, 
-  Landmark, ChevronDown, Menu, X, Plus, Search, Command, Activity, Sun, Moon 
+  Landmark, ChevronDown, Menu, X, Plus, Search, Command, Activity, Sun, Moon,
+  Images
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -81,6 +82,7 @@ export default function Layout() {
     { path: '/leases', label: t.leases, icon: MapIcon },
     { path: '/employees', label: t.employees, icon: UserCircle },
     { path: '/parties', label: t.parties, icon: Users },
+    { path: '/gallery', label: t.galleryAndReceipts || 'Gallery & Receipts', icon: Images },
     { path: '/finance', label: t.finance, icon: PieChart },
     { path: '/settings', label: t.settings, icon: SettingsIcon },
   ];

@@ -17,6 +17,7 @@ import Employees from './pages/Employees';
 import Leases from './pages/Leases';
 import Finance from './pages/Finance';
 import Accounts from './pages/Accounts';
+import GalleryReceipts from './pages/GalleryReceipts';
 import Login from './pages/Login';
 
 export default function App() {
@@ -101,6 +102,7 @@ export default function App() {
             <Route path="/leases" element={<Leases />} />
             <Route path="/employees" element={<Employees />} />
             <Route path="/parties" element={<Parties />} />
+            <Route path="/gallery" element={<GalleryReceipts />} />
             <Route path="/finance" element={<Finance />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/" replace />} />

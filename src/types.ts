@@ -119,10 +119,34 @@ export interface Task {
   id: string;
   farmId: string;
   title: string;
+  description?: string;
   category: string;
+  priority?: 'HIGH' | 'MEDIUM' | 'LOW';
   assigneeId?: string;
+  assignedWorker?: string;
   dueDateBS: string;
+  dueTime?: string;
   status: 'TODO' | 'IN_PROGRESS' | 'COMPLETED';
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+export interface GalleryItem {
+  id: string;
+  farmId: string;
+  title: string;
+  category: string;
+  vendorName?: string;
+  dateBS: string;
+  amount?: number;
+  fileUrl: string;
+  fileName: string;
+  fileType: 'image' | 'pdf' | string;
+  fileSize?: number;
+  storagePath?: string;
+  notes?: string;
+  createdAt: number;
+  createdBy?: string;
 }
 
 export interface BankAccount {
