@@ -1,4 +1,5 @@
 import express from 'express';
+import http from 'http';
 import path from 'path';
 import { createServer as createViteServer, createLogger } from 'vite';
 import { GoogleGenAI } from '@google/genai';
@@ -200,6 +201,8 @@ app.post('/api/ai/parse-receipt', upload.single('receipt'), async (req, res) => 
 });
 
 async function startServer() {
+  const httpServer = http.createServer(app);
+
   if (process.env.NODE_ENV !== 'production') {
     const customLogger = createLogger();
     const origWarn = customLogger.warn;
@@ -213,10 +216,13 @@ async function startServer() {
       origError(msg, options);
     };
 
+    const isCloudHosted = Boolean(process.env.K_SERVICE || process.env.K_REVISION);
+    const disableHmr = process.env.DISABLE_HMR === 'true' || isCloudHosted;
+
     const vite = await createViteServer({
       server: {
         middlewareMode: true,
-        hmr: process.env.DISABLE_HMR !== 'true' ? undefined : false,
+        hmr: disableHmr ? false : { server: httpServer },
       },
       customLogger,
       appType: 'spa',
@@ -230,7 +236,7 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
 }

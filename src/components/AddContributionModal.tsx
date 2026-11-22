@@ -101,8 +101,8 @@ export default function AddContributionModal({ partner, accounts, isOpen, onClos
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center p-4 z-[60]">
-      <div className="bg-white rounded-2xl w-full max-w-md shadow-xl overflow-hidden">
+    <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center p-3 sm:p-4 z-[60]">
+      <div className="bg-white rounded-2xl w-full max-w-md max-h-[92dvh] overflow-y-auto shadow-xl">
         <div className="flex justify-between items-center p-6 border-b border-stone-100 bg-stone-50">
           <div className="flex items-center space-x-3">
             <div className="p-2 bg-blue-100 text-blue-700 rounded-lg"><Wallet size={20} /></div>

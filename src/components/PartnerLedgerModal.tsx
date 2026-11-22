@@ -371,11 +371,11 @@ export default function PartnerLedgerModal({ partner, accounts: initialAccounts,
             </div>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-stone-200">
-              <table className="w-full text-left border-collapse">
+              <table className="w-full text-left border-collapse [&_th]:border [&_th]:border-stone-200 [&_td]:border [&_td]:border-stone-200">
                 <thead>
                   <tr className="bg-stone-50/90 border-b border-stone-200 text-stone-600 font-semibold text-xs uppercase tracking-wider">
-                    <th className="py-3.5 px-4 w-14 text-center">S.N.</th>
-                    <th className="py-3.5 px-4">{t.dateBS || 'Date (B.S.)'}</th>
+                    <th className="py-3 px-2 w-px whitespace-nowrap text-center">S.N.</th>
+                    <th className="py-3 px-2.5 w-px whitespace-nowrap">{t.dateBS || 'Date (B.S.)'}</th>
                     <th className="py-3.5 px-4">{t.paymentMethod || 'Payment Method'}</th>
                     <th className="py-3.5 px-4">{language === 'ne' ? 'जम्मा खाता' : 'Account'}</th>
                     <th className="py-3.5 px-4">{t.notes || 'Remarks'}</th>
@@ -386,10 +386,10 @@ export default function PartnerLedgerModal({ partner, accounts: initialAccounts,
                 <tbody className="divide-y divide-stone-100 text-sm">
                   {contributions.map((c, idx) => (
                     <tr key={c.id} className="hover:bg-blue-50/30 transition-colors">
-                      <td className="py-3.5 px-4 text-center text-stone-500 font-medium">
+                      <td className="py-3 px-2 w-px whitespace-nowrap text-center text-stone-500 font-medium">
                         {contributions.length - idx}
                       </td>
-                      <td className="py-3.5 px-4 text-stone-800 font-medium whitespace-nowrap">
+                      <td className="py-3 px-2.5 w-px whitespace-nowrap text-xs sm:text-sm text-stone-800 font-medium">
                         {c.dateBS}
                       </td>
                       <td className="py-3.5 px-4 whitespace-nowrap">
@@ -458,8 +458,8 @@ export default function PartnerLedgerModal({ partner, accounts: initialAccounts,
 
       {/* Edit Contribution Sub-Modal */}
       {editingContrib && (
-        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-[70]">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden border border-stone-100 animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-[70]">
+          <div className="bg-white rounded-2xl w-full max-w-md max-h-[92dvh] overflow-y-auto shadow-2xl border border-stone-100 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex justify-between items-center p-5 border-b border-stone-100 bg-stone-50">
               <div className="flex items-center space-x-2.5">
                 <div className="p-2 bg-blue-100 text-blue-700 rounded-lg">

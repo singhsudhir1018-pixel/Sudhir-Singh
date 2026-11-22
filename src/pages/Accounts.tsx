@@ -487,11 +487,11 @@ export default function Accounts() {
                    </div>
                 </div>
 
-                <div className="border border-stone-200 rounded-xl ">
-                  <table className="w-full text-left border-collapse text-sm">
+                <div className="border border-stone-200 rounded-xl overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-sm [&_th]:border [&_th]:border-stone-200 [&_td]:border [&_td]:border-stone-200">
                     <thead>
                       <tr className="bg-stone-100 text-stone-600 font-medium">
-                        <th className="p-3 border-b border-stone-200">{t.dateBS || 'Date'}</th>
+                        <th className="px-2.5 py-2.5 w-px whitespace-nowrap border-b border-stone-200 text-xs sm:text-sm">{t.dateBS || 'Date'}</th>
                         <th className="p-3 border-b border-stone-200">Description</th>
                         <th className="p-3 border-b border-stone-200 text-right text-green-700">{t.inflow || 'Inflow'} (+)</th>
                         <th className="p-3 border-b border-stone-200 text-right text-red-700">{t.outflow || 'Outflow'} (-)</th>
@@ -501,7 +501,7 @@ export default function Accounts() {
                     <tbody>
                       {getStatement(statementAccount).items.map((item, idx) => (
                         <tr key={idx} className="border-b border-stone-100 hover:bg-stone-50">
-                          <td className="p-3 whitespace-nowrap text-stone-500">{item.dateBS}</td>
+                          <td className="px-2.5 py-2.5 w-px whitespace-nowrap text-xs sm:text-sm text-stone-500">{item.dateBS}</td>
                           <td className="p-3 text-stone-800">{item.desc}</td>
                           <td className="p-3 text-right font-medium text-green-600">
                             {item.inflow > 0 ? item.inflow.toLocaleString() : '-'}
@@ -535,8 +535,8 @@ export default function Accounts() {
 
       {/* Account Edit/Add Modal */}
       {isAccountModalOpen && (
-        <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl w-full max-w-md  shadow-xl">
+        <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center p-3 sm:p-4 z-50">
+          <div className="bg-white rounded-2xl w-full max-w-md max-h-[92dvh] overflow-y-auto shadow-xl">
              <div className="flex justify-between items-center p-6 border-b border-stone-100">
               <h2 className="text-xl font-bold text-stone-800">{editingId ? (t.edit || 'Edit') : (t.addAccount || 'Add Account')}</h2>
               <button onClick={() => setIsAccountModalOpen(false)} className="text-stone-400 hover:text-stone-600 p-1"><X size={20} /></button>
@@ -585,8 +585,8 @@ export default function Accounts() {
 
       {/* Internal Transfer Modal */}
       {isTransferModalOpen && (
-        <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl w-full max-w-md  shadow-xl">
+        <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center p-3 sm:p-4 z-50">
+          <div className="bg-white rounded-2xl w-full max-w-md max-h-[92dvh] overflow-y-auto shadow-xl">
              <div className="flex justify-between items-center p-6 border-b border-stone-100">
               <h2 className="text-xl font-bold text-stone-800">{t.transferFunds || 'Internal Transfer'}</h2>
               <button onClick={() => setIsTransferModalOpen(false)} className="text-stone-400 hover:text-stone-600 p-1"><X size={20} /></button>

@@ -1,5 +1,6 @@
 import React from 'react';
 import { useState, useRef, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store';
 import SearchableCategorySelect from '../components/SearchableCategorySelect';
 import { translations } from '../lib/translations';
@@ -11,8 +12,19 @@ import { db } from '../lib/firebase';
 import { Transaction, Category, Party, Partner, Batch, BankAccount } from '../types';
 import { sortTransactionsDesc, sortTransactionsAsc } from '../lib/nepaliDateHelper';
 
+function getTxPartyDelta(tx: Pick<Transaction, 'amount' | 'paymentMethod' | 'partyBalanceEffect'>): number {
+  const amt = Number(tx.amount) || 0;
+  if (tx.partyBalanceEffect === 'NONE') return 0;
+  if (tx.partyBalanceEffect === 'ADD_DUE') return amt;
+  if (tx.partyBalanceEffect === 'REDUCE_DUE') return -amt;
+  // Legacy transactions without partyBalanceEffect
+  return tx.paymentMethod === 'CREDIT' ? amt : -amt;
+}
+
 export default function Transactions() {
   const { language, farmId } = useAppStore();
+  const location = useLocation();
+  const navigate = useNavigate();
   const t = translations[language];
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -31,6 +43,8 @@ export default function Transactions() {
   const [parsing, setParsing] = useState(false);
   const [ocrNotice, setOcrNotice] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingOldWasCredit, setEditingOldWasCredit] = useState(false);
+  const [applyPartyBalance, setApplyPartyBalance] = useState(true);
   
   const [previewTx, setPreviewTx] = useState<Transaction | null>(null);
 
@@ -96,6 +110,14 @@ export default function Transactions() {
     return () => { unsubTxs(); unsubCats(); unsubParties(); unsubPartners(); unsubBatches(); unsubAcc(); };
   }, [farmId]);
 
+  useEffect(() => {
+    const state = location.state as { editTransaction?: Transaction } | null;
+    if (state?.editTransaction) {
+      openEdit(state.editTransaction);
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.state]);
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -137,9 +159,19 @@ export default function Transactions() {
     if (!farmId) return;
 
     const amt = Number(formData.amount);
+    const hasSelectedParty = Boolean(formData.partyId && parties.some(p => p.id === formData.partyId));
+    const partyBalanceEffect: 'ADD_DUE' | 'REDUCE_DUE' | 'NONE' = !hasSelectedParty
+      ? 'NONE'
+      : formData.paymentMethod === 'CREDIT'
+      ? 'ADD_DUE'
+      : applyPartyBalance
+      ? 'REDUCE_DUE'
+      : 'NONE';
+
     const payload = {
       ...formData,
       amount: amt,
+      partyBalanceEffect,
       farmId,
       createdBy: 'user', 
     };
@@ -231,12 +263,9 @@ export default function Transactions() {
           
           // Revert old party balance
           if (oldPartyDoc && oldPartyDoc.exists()) {
-            if (oldTx.paymentMethod !== 'CREDIT') {
-               const revertAmt = oldTx.amount; // always add back what was paid
-               transaction.update(oldPartyDoc.ref, { pendingBalance: oldPartyDoc.data().pendingBalance + revertAmt });
-            } else {
-               transaction.update(oldPartyDoc.ref, { pendingBalance: oldPartyDoc.data().pendingBalance - oldTx.amount });
-            }
+            const oldDelta = getTxPartyDelta(oldTx);
+            const curOldPending = Number(oldPartyDoc.data().pendingBalance) || 0;
+            transaction.update(oldPartyDoc.ref, { pendingBalance: curOldPending - oldDelta });
           }
           
           transaction.update(doc(db, 'transactions', editingId), payload);
@@ -259,21 +288,14 @@ export default function Transactions() {
           
           // Apply new party balance
           if (formData.partyId) {
-             let finalBal = 0;
+             const newDelta = getTxPartyDelta({ amount: amt, paymentMethod: formData.paymentMethod, partyBalanceEffect });
              if (oldTx.partyId === formData.partyId && oldPartyDoc && oldPartyDoc.exists()) {
-                let revertAmt = 0;
-                if (oldTx.paymentMethod !== 'CREDIT') revertAmt = oldTx.amount;
-                else revertAmt = -oldTx.amount;
-                finalBal = oldPartyDoc.data().pendingBalance + revertAmt;
-                
-                if (formData.paymentMethod !== 'CREDIT') finalBal -= amt;
-                else finalBal += amt;
-                transaction.update(newPartyRef, { pendingBalance: finalBal });
+                const oldDelta = getTxPartyDelta(oldTx);
+                const curPending = Number(oldPartyDoc.data().pendingBalance) || 0;
+                transaction.update(newPartyRef, { pendingBalance: curPending - oldDelta + newDelta });
              } else if (newPartyDoc && newPartyDoc.exists()) {
-                finalBal = newPartyDoc.data().pendingBalance;
-                if (formData.paymentMethod !== 'CREDIT') finalBal -= amt;
-                else finalBal += amt;
-                transaction.update(newPartyRef, { pendingBalance: finalBal });
+                const curPending = Number(newPartyDoc.data().pendingBalance) || 0;
+                transaction.update(newPartyRef, { pendingBalance: curPending + newDelta });
              }
           }
         } else {
@@ -288,12 +310,9 @@ export default function Transactions() {
           }
 
           if (formData.partyId && newPartyDoc && newPartyDoc.exists()) {
-             const party = newPartyDoc.data();
-             if (formData.paymentMethod !== 'CREDIT') {
-                transaction.update(newPartyRef, { pendingBalance: party.pendingBalance - amt });
-             } else {
-                transaction.update(newPartyRef, { pendingBalance: party.pendingBalance + amt });
-             }
+             const curPending = Number(newPartyDoc.data().pendingBalance) || 0;
+             const newDelta = getTxPartyDelta({ amount: amt, paymentMethod: formData.paymentMethod, partyBalanceEffect });
+             transaction.update(newPartyRef, { pendingBalance: curPending + newDelta });
           }
         }
         
@@ -318,6 +337,8 @@ export default function Transactions() {
 
       setIsModalOpen(false);
       setEditingId(null);
+      setEditingOldWasCredit(false);
+      setApplyPartyBalance(true);
       setFormData(initialForm);
     } catch (err) {
       console.error("Save failed", err);
@@ -343,11 +364,9 @@ export default function Transactions() {
         if (tx && tx.partyId) {
           const party = parties.find(p => p.id === tx.partyId);
           if (party) {
-             if (tx.paymentMethod !== 'CREDIT') {
-                batch.update(doc(db, 'parties', party.id), { pendingBalance: party.pendingBalance + tx.amount });
-             } else {
-                batch.update(doc(db, 'parties', party.id), { pendingBalance: party.pendingBalance - tx.amount });
-             }
+             const delta = getTxPartyDelta(tx);
+             const curPending = Number(party.pendingBalance) || 0;
+             batch.update(doc(db, 'parties', party.id), { pendingBalance: curPending - delta });
           }
         }
         
@@ -361,7 +380,16 @@ export default function Transactions() {
 
   const openEdit = (tx: Transaction) => {
     setEditingId(tx.id);
+    setEditingOldWasCredit(tx.paymentMethod === 'CREDIT');
+    if (tx.partyBalanceEffect === 'REDUCE_DUE') {
+      setApplyPartyBalance(true);
+    } else if (tx.partyBalanceEffect === 'NONE') {
+      setApplyPartyBalance(false);
+    } else {
+      setApplyPartyBalance(tx.paymentMethod !== 'CREDIT');
+    }
     setFormData({
+      ...initialForm,
       type: tx.type,
       amount: tx.amount.toString(),
       category: tx.category,
@@ -573,42 +601,44 @@ export default function Transactions() {
       </div>
 
       <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-x-auto">
-        <table className="w-full text-left border-collapse min-w-[800px]">
+        <table className="w-full text-left border-collapse min-w-[800px] [&_th]:border [&_th]:border-stone-200 [&_td]:border [&_td]:border-stone-200">
           <thead>
             <tr className="bg-stone-50 border-b border-stone-200 text-stone-500 font-medium text-sm">
-              <th className="p-4 w-16">{t.sn}</th>
+              <th className="px-2.5 py-3 w-px whitespace-nowrap">{t.sn}</th>
               <th
-                className="p-4 cursor-pointer hover:bg-stone-100 transition-colors select-none group"
+                className="px-2.5 py-3 w-px whitespace-nowrap cursor-pointer hover:bg-stone-100 transition-colors select-none group"
                 onClick={handleToggleDateSort}
                 title={language === 'ne' ? 'मिति अनुसार क्रमबद्ध गर्न क्लिक गर्नुहोस्' : 'Click to toggle sort by date'}
               >
-                <div className="flex items-center space-x-1.5">
-                  <span className="group-hover:text-stone-800 font-semibold">{t.dateBS}</span>
-                  <span className="p-0.5 rounded group-hover:bg-stone-200 transition-colors">
-                    {sortMode === 'LATEST_FIRST' ? (
-                      <ArrowDown size={15} className="text-emerald-600" />
-                    ) : sortMode === 'OLDEST_FIRST' ? (
-                      <ArrowUp size={15} className="text-blue-600" />
-                    ) : (
-                      <ArrowUpDown size={14} className="text-stone-400" />
-                    )}
-                  </span>
+                <div className="flex flex-col items-start gap-0.5">
+                  <div className="flex items-center space-x-1">
+                    <span className="group-hover:text-stone-800 font-semibold">{t.dateBS}</span>
+                    <span className="p-0.5 rounded group-hover:bg-stone-200 transition-colors">
+                      {sortMode === 'LATEST_FIRST' ? (
+                        <ArrowDown size={14} className="text-emerald-600" />
+                      ) : sortMode === 'OLDEST_FIRST' ? (
+                        <ArrowUp size={14} className="text-blue-600" />
+                      ) : (
+                        <ArrowUpDown size={13} className="text-stone-400" />
+                      )}
+                    </span>
+                  </div>
                   {sortMode === 'LATEST_FIRST' && (
-                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
-                      {language === 'ne' ? 'नयाँ पहिले' : 'Latest First'}
+                    <span className="text-[10px] leading-none font-medium px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
+                      {language === 'ne' ? 'नयाँ पहिले' : 'Latest'}
                     </span>
                   )}
                   {sortMode === 'OLDEST_FIRST' && (
-                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap">
-                      {language === 'ne' ? 'पुरानो पहिले' : 'Oldest First'}
+                    <span className="text-[10px] leading-none font-medium px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap">
+                      {language === 'ne' ? 'पुरानो पहिले' : 'Oldest'}
                     </span>
                   )}
                 </div>
               </th>
-              <th className="p-4">{t.category}</th>
-              <th className="p-4">{t.partyOrPartner || 'Party / Partner'}</th>
-              <th className="p-4 text-right">{t.amount}</th>
-              <th className="p-4 text-center">{t.actions}</th>
+              <th className="p-3 sm:p-4">{t.category}</th>
+              <th className="p-3 sm:p-4">{t.notes || (language === 'ne' ? 'कैफियत' : 'Remarks / Notes')}</th>
+              <th className="p-3 sm:p-4 text-right whitespace-nowrap">{t.amount}</th>
+              <th className="p-3 sm:p-4 text-center w-px whitespace-nowrap">{t.actions}</th>
             </tr>
           </thead>
           <tbody>
@@ -618,24 +648,13 @@ export default function Transactions() {
                 className="border-b border-stone-100 hover:bg-stone-50 cursor-pointer"
                 onDoubleClick={() => setPreviewTx(tx)}
               >
-                <td className="p-4 text-stone-600">{index + 1}</td>
-                <td className="p-4 text-stone-600">{tx.dateBS}</td>
+                <td className="px-2.5 py-3 w-px whitespace-nowrap text-center text-stone-600 text-xs sm:text-sm">{index + 1}</td>
+                <td className="px-2.5 py-3 w-px whitespace-nowrap text-stone-600 text-xs sm:text-sm">{tx.dateBS}</td>
                 <td className="p-4 text-stone-800">
                   {tx.subCategory ? tx.subCategory : tx.category}
                 </td>
-                <td className="p-4 text-stone-700">
-                  {(() => {
-                    const info = getPartyOrPartnerInfo(tx);
-                    if (!info) return <span className="text-stone-400 font-normal">-</span>;
-                    return (
-                      <div className="flex items-center space-x-2">
-                        <span className="font-semibold text-stone-900">{info.name}</span>
-                        <span className={`text-[11px] px-2 py-0.5 rounded-md border font-medium whitespace-nowrap ${info.badgeColor}`}>
-                          {info.badgeLabel}
-                        </span>
-                      </div>
-                    );
-                  })()}
+                <td className="p-4 text-stone-700 min-w-[200px] max-w-md whitespace-pre-wrap break-words text-sm">
+                  {tx.notes ? tx.notes : <span className="text-stone-400">-</span>}
                 </td>
                 <td className={`p-4 text-right font-medium ${tx.type === 'INCOME' ? 'text-emerald-600' : tx.type === 'CAPITAL_INFLOW' ? 'text-indigo-600' : 'text-rose-600'}`}>Rs. {tx.amount.toLocaleString()}</td>
                 <td className="p-4 text-center">
@@ -660,10 +679,10 @@ export default function Transactions() {
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl w-full max-w-2xl  shadow-xl">
-            <div className="flex justify-between items-center p-6 border-b border-stone-100">
-              <h2 className="text-xl font-bold text-stone-800">{parsing ? t.parsingReceipt : (editingId ? t.edit : t.addTransaction)}</h2>
+        <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center p-3 sm:p-4 z-50">
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[92dvh] flex flex-col shadow-xl overflow-hidden">
+            <div className="flex justify-between items-center p-4 sm:p-6 border-b border-stone-100 shrink-0">
+              <h2 className="text-lg sm:text-xl font-bold text-stone-800">{parsing ? t.parsingReceipt : (editingId ? t.edit : t.addTransaction)}</h2>
               <button onClick={() => setIsModalOpen(false)} className="text-stone-400 hover:text-stone-600 p-1">
                 <X size={20} />
               </button>
@@ -675,15 +694,15 @@ export default function Transactions() {
                 <p className="text-stone-600">{t.aiExtracting}</p>
               </div>
             ) : (
-              <div>
+              <div className="overflow-y-auto flex-1">
                 {ocrNotice && (
-                  <div className="mx-6 mt-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs flex justify-between items-center">
+                  <div className="mx-4 sm:mx-6 mt-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs flex justify-between items-center">
                     <span>{ocrNotice}</span>
                     <button type="button" onClick={() => setOcrNotice(null)} className="text-amber-500 hover:text-amber-700 ml-2 font-bold text-sm">✕</button>
                   </div>
                 )}
-                <form onSubmit={handleSave} className="p-6 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <form onSubmit={handleSave} className="p-4 sm:p-6 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-stone-700 mb-1">{t.type}</label>
                     <select 
@@ -750,7 +769,14 @@ export default function Transactions() {
                     <label className="block text-sm font-medium text-stone-700 mb-1">{t.partyOrPartner || 'Party / Partner'} (Optional)</label>
                     <select 
                       value={formData.partyId}
-                      onChange={e => setFormData({...formData, partyId: e.target.value})}
+                      onChange={e => {
+                        const pid = e.target.value;
+                        setFormData({...formData, partyId: pid});
+                        if (!editingId) {
+                          const p = parties.find(item => item.id === pid);
+                          setApplyPartyBalance(Boolean(p && (Number(p.pendingBalance) || 0) > 0));
+                        }
+                      }}
                       className="w-full px-4 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     >
                       <option value="">{language === 'ne' ? '-- छान्नुहोस् --' : '-- Select Party or Partner --'}</option>
@@ -774,7 +800,16 @@ export default function Transactions() {
                     <label className="block text-sm font-medium text-stone-700 mb-1">{t.paymentMethod}</label>
                     <select 
                       value={formData.paymentMethod}
-                      onChange={e => setFormData({...formData, paymentMethod: e.target.value})}
+                      onChange={e => {
+                        const pm = e.target.value;
+                        setFormData({...formData, paymentMethod: pm});
+                        if (editingId && editingOldWasCredit && pm !== 'CREDIT') {
+                          setApplyPartyBalance(false);
+                        } else if (!editingId && pm !== 'CREDIT') {
+                          const p = parties.find(item => item.id === formData.partyId);
+                          setApplyPartyBalance(Boolean(p && (Number(p.pendingBalance) || 0) > 0));
+                        }
+                      }}
                       className="w-full px-4 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     >
                       <option value="CASH">{t.cash}</option>
@@ -784,6 +819,43 @@ export default function Transactions() {
                     </select>
                   </div>
                 </div>
+
+                {(() => {
+                  const selectedParty = parties.find(p => p.id === formData.partyId);
+                  if (!selectedParty || formData.paymentMethod === 'CREDIT') return null;
+                  const pBal = Number(selectedParty.pendingBalance) || 0;
+                  return (
+                    <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl text-xs space-y-1.5">
+                      <div className="flex items-center justify-between text-emerald-950 font-semibold">
+                        <span>
+                          {selectedParty.name} ({selectedParty.type === 'SUPPLIER' ? (language === 'ne' ? 'आपूर्तिकर्ता' : 'Supplier') : (language === 'ne' ? 'क्रेता' : 'Buyer')})
+                        </span>
+                        <span className={pBal > 0 ? 'text-rose-700 font-bold' : 'text-emerald-700'}>
+                          {pBal > 0
+                            ? `${selectedParty.type === 'SUPPLIER' ? (language === 'ne' ? 'दिन बाँकी' : 'To Pay') : (language === 'ne' ? 'लिन बाँकी' : 'To Get')}: Rs. ${pBal.toLocaleString()}`
+                            : (language === 'ne' ? 'हाल बाँकी: Rs. 0' : 'Current Due: Rs. 0')}
+                        </span>
+                      </div>
+                      <label className="flex items-center space-x-2 cursor-pointer text-stone-700">
+                        <input
+                          type="checkbox"
+                          checked={applyPartyBalance}
+                          onChange={(e) => setApplyPartyBalance(e.target.checked)}
+                          className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
+                        />
+                        <span>
+                          {pBal > 0
+                            ? (language === 'ne'
+                                ? 'यो रकमबाट पार्टीको बाँकी खाता हिसाब (तिर्न/लिन बाँकी) घटाउनुहोस्'
+                                : 'Deduct this payment from party pending Khata balance')
+                            : (language === 'ne'
+                                ? 'पार्टीको खातामा अग्रिम भुक्तानी / एडभान्स रूपमा घटाउनुहोस्'
+                                : 'Record as Advance in party Khata balance')}
+                        </span>
+                      </label>
+                    </div>
+                  );
+                })()}
 
                 <div>
                   <label className="block text-sm font-medium text-stone-700 mb-1">{t.notes}</label>
@@ -881,8 +953,8 @@ export default function Transactions() {
 
       {/* Preview Modal */}
       {previewTx && (
-        <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-xl overflow-hidden">
+        <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center p-3 sm:p-4 z-50">
+          <div className="bg-white rounded-2xl w-full max-w-md max-h-[92dvh] flex flex-col shadow-xl overflow-hidden">
             <div className={`p-6 text-white ${previewTx.type === 'INCOME' ? 'bg-emerald-600' : 'bg-rose-600'} flex justify-between items-start`}>
               <div>
                 <span className="text-white/80 text-sm font-medium uppercase tracking-wider">{previewTx.type === 'INCOME' ? t.income : t.expense}</span>

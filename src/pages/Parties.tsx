@@ -36,7 +36,8 @@ export default function Parties() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedPartnerForContrib, setSelectedPartnerForContrib] = useState<Partner | null>(null);
   const [selectedPartnerForLedger, setSelectedPartnerForLedger] = useState<Partner | null>(null);
-  const [selectedPartyForKhata, setSelectedPartyForKhata] = useState<Party | null>(null);
+  const [selectedPartyIdForKhata, setSelectedPartyIdForKhata] = useState<string | null>(null);
+  const selectedPartyForKhata = parties.find(p => p.id === selectedPartyIdForKhata) || null;
 
   const initialParty = { name: '', type: 'BUYER' as const, phone: '', address: '', panVat: '', pendingBalance: 0 };
   const initialPartner = { name: '', investmentAmount: 0, profitSharePercentage: 0, phone: '', joiningDateBS: new NepaliDate().format('YYYY MMMM DD'), dividendPayable: 0, accountId: '', paymentMethod: 'CASH', email: '', address: '', photoUrl: '' };
@@ -294,9 +295,9 @@ export default function Parties() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredParties.map(party => (
               <div key={party.id} className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm hover:shadow-md transition-shadow relative group">
-                <div className="absolute top-4 right-4 flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => openEditParty(party)} className="p-1.5 bg-stone-100 text-stone-600 hover:text-blue-600 rounded-lg"><Edit2 size={16} /></button>
-                  <button onClick={() => handleDeleteParty(party.id)} className="p-1.5 bg-stone-100 text-stone-600 hover:text-red-600 rounded-lg"><Trash2 size={16} /></button>
+                <div className="absolute top-4 right-4 flex space-x-1.5 opacity-80 group-hover:opacity-100 transition-opacity">
+                  <button onClick={() => openEditParty(party)} className="p-1.5 bg-stone-100 text-stone-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title={t.edit || 'Edit'}><Edit2 size={16} /></button>
+                  <button onClick={() => handleDeleteParty(party.id)} className="p-1.5 bg-stone-100 text-stone-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title={t.delete || 'Delete'}><Trash2 size={16} /></button>
                 </div>
                 
                 <div className="flex items-center space-x-4 mb-4">
@@ -368,7 +369,7 @@ export default function Parties() {
                     )}
                   </div>
                   <button 
-                    onClick={() => setSelectedPartyForKhata(party)}
+                    onClick={() => setSelectedPartyIdForKhata(party.id)}
                     className="flex items-center space-x-1.5 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200/80 px-3 py-2 rounded-xl transition-colors shadow-xs active:scale-98"
                   >
                     <BookOpen size={14} />
@@ -472,8 +473,8 @@ export default function Parties() {
 
       {/* Modals */}
       {isPartyModalOpen && (
-        <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-xl">
+        <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center p-3 sm:p-4 z-50">
+          <div className="bg-white rounded-2xl w-full max-w-md max-h-[92dvh] overflow-y-auto shadow-xl">
              <div className="flex justify-between items-center p-6 border-b border-stone-100">
               <h2 className="text-xl font-bold text-stone-800">{editingId ? t.edit : t.addParty}</h2>
               <button onClick={() => setIsPartyModalOpen(false)} className="text-stone-400 hover:text-stone-600 p-1"><X size={20} /></button>
@@ -496,10 +497,32 @@ export default function Parties() {
                   <input type="text" required value={partyForm.phone} onChange={e => setPartyForm({...partyForm, phone: e.target.value})} className="w-full px-4 py-2 border border-stone-200 rounded-xl focus:ring-2 focus:ring-green-500" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-stone-700 mb-1">{t.initialBalance}</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-sm font-medium text-stone-700">
+                      {editingId 
+                        ? (language === 'ne' ? 'बाँकी रकम (Pending Balance)' : 'Pending Balance')
+                        : t.initialBalance}
+                    </label>
+                    {editingId && partyForm.pendingBalance !== 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setPartyForm({ ...partyForm, pendingBalance: 0 })}
+                        className="text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-200 transition-colors"
+                      >
+                        {language === 'ne' ? '० (चुक्ता)' : 'Set 0'}
+                      </button>
+                    )}
+                  </div>
                   <input type="number" required value={partyForm.pendingBalance} onChange={e => setPartyForm({...partyForm, pendingBalance: Number(e.target.value)})} className="w-full px-4 py-2 border border-stone-200 rounded-xl focus:ring-2 focus:ring-green-500" />
                 </div>
               </div>
+              {editingId && (
+                <p className="text-[11px] text-stone-500 bg-stone-50 p-2.5 rounded-xl border border-stone-200">
+                  {language === 'ne'
+                    ? 'नोट: यदि आपूर्तिकर्तालाई पैसा तिरिसक्नुभएको छ वा हिसाब चुक्ता भइसकेको छ भने माथि बाँकी रकम ० (शून्य) राखेर सेभ गर्नुहोस्।'
+                    : 'Note: If this party has already been paid or settled, set Pending Balance to 0 and save.'}
+                </p>
+              )}
               <div className="pt-4 flex justify-end space-x-3">
                 <button type="button" onClick={() => setIsPartyModalOpen(false)} className="px-5 py-2 text-stone-600 font-medium hover:bg-stone-100 rounded-xl">{t.cancel}</button>
                 <button type="submit" className="flex items-center space-x-2 px-5 py-2 bg-green-600 text-white font-medium hover:bg-green-700 rounded-xl"><Save size={18} /><span>{t.saveEntry}</span></button>
@@ -644,7 +667,7 @@ export default function Parties() {
         <PartyKhataModal
           party={selectedPartyForKhata}
           isOpen={true}
-          onClose={() => setSelectedPartyForKhata(null)}
+          onClose={() => setSelectedPartyIdForKhata(null)}
         />
       )}
     </div>

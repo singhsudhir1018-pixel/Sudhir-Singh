@@ -165,7 +165,7 @@ export default function Layout() {
       </AnimatePresence>
 
       {/* Sidebar Desktop */}
-      <aside className={`w-72 bg-emerald-800 border-r border-emerald-900/50 flex flex-col print:hidden ${isMobileMenuOpen ? 'fixed inset-y-0 left-0 z-50 shadow-2xl' : 'hidden lg:flex'}`}>
+      <aside className={`w-[82vw] max-w-72 lg:w-72 bg-emerald-800 border-r border-emerald-900/50 flex flex-col print:hidden ${isMobileMenuOpen ? 'fixed inset-y-0 left-0 z-50 shadow-2xl' : 'hidden lg:flex'}`}>
         <div className="p-6">
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold text-white">
@@ -233,7 +233,7 @@ export default function Layout() {
       </AnimatePresence>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col h-screen overflow-hidden relative w-full print:h-auto print:overflow-visible">
+      <main className="flex-1 flex flex-col h-[100dvh] overflow-hidden relative w-full print:h-auto print:overflow-visible">
         {/* Header */}
         <header className="bg-white/80 backdrop-blur-xl border-b border-stone-200/50 h-16 flex items-center justify-between px-4 lg:px-8 shrink-0 relative z-20 print:hidden">
           <div className="flex items-center space-x-3">
@@ -324,7 +324,7 @@ export default function Layout() {
         </header>
 
         {/* Page Content */}
-        <div className="flex-1 overflow-auto p-4 lg:p-8 bg-stone-50/50 relative print:overflow-visible print:bg-white print:p-0">
+        <div className="flex-1 overflow-auto p-3 sm:p-4 pb-24 lg:p-8 bg-stone-50/50 relative print:overflow-visible print:bg-white print:p-0">
           <div className="max-w-7xl mx-auto h-full print:max-w-none">
             <Outlet />
           </div>

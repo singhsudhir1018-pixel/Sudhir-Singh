@@ -19,6 +19,7 @@ export interface Transaction {
   paymentMethod: string;
   dateBS: string;
   notes?: string;
+  partyBalanceEffect?: 'ADD_DUE' | 'REDUCE_DUE' | 'NONE';
   createdAt?: number;
   createdBy?: string;
 }

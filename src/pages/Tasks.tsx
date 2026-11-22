@@ -167,14 +167,14 @@ export default function Tasks() {
 
       {/* Tasks Table */}
       <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden overflow-x-auto">
-        <table className="w-full text-left border-collapse min-w-[850px]">
+        <table className="w-full text-left border-collapse min-w-[850px] [&_th]:border [&_th]:border-stone-200 [&_td]:border [&_td]:border-stone-200">
           <thead>
             <tr className="bg-stone-50 border-b border-stone-200 text-stone-500 font-semibold text-xs uppercase tracking-wider">
               <th className="p-4">{t.taskDetails || 'Task'}</th>
               <th className="p-4">{t.category || 'Category'}</th>
               <th className="p-4">{t.priority || 'Priority'}</th>
               <th className="p-4">{t.assignedWorker || 'Assignee'}</th>
-              <th className="p-4">{t.dueDateBS || 'Due Date'}</th>
+              <th className="px-2.5 py-3 w-px whitespace-nowrap">{t.dueDateBS || 'Due Date'}</th>
               <th className="p-4">{t.status || 'Status'}</th>
               <th className="p-4 text-center">{t.actions || 'Actions'}</th>
             </tr>
@@ -220,7 +220,7 @@ export default function Tasks() {
                       <span className="text-xs text-stone-400 italic">-</span>
                     )}
                   </td>
-                  <td className="p-4 text-stone-600">
+                  <td className="px-2.5 py-3 w-px whitespace-nowrap text-stone-600">
                     <div className="font-medium text-xs">{task.dueDateBS}</div>
                     {task.dueTime && (
                       <div className="text-[11px] text-stone-400 flex items-center space-x-1 mt-0.5">
@@ -294,8 +294,8 @@ export default function Tasks() {
 
       {/* ADD TASK MODAL */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl p-6 border border-stone-100 my-8">
+        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[92dvh] overflow-y-auto shadow-2xl p-5 sm:p-6 border border-stone-100 my-auto">
             <h2 className="text-xl font-bold mb-4 text-stone-800">{t.addTask}</h2>
             <form onSubmit={handleSave} className="space-y-4">
               <div>

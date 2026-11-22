@@ -57,8 +57,8 @@ export default function Employees() {
         </button>
       </div>
 
-      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm ">
-        <table className="w-full text-left border-collapse">
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-x-auto">
+        <table className="w-full text-left border-collapse [&_th]:border [&_th]:border-stone-200 [&_td]:border [&_td]:border-stone-200">
           <thead>
             <tr className="bg-stone-50 border-b border-stone-200 text-stone-500 font-medium text-sm">
               <th className="p-4">{t.name}</th>
@@ -72,9 +72,11 @@ export default function Employees() {
           <tbody>
             {employees.map(emp => (
               <tr key={emp.id} className="border-b border-stone-100 hover:bg-stone-50">
-                <td className="p-4 font-medium text-stone-800 flex items-center space-x-3">
-                  <UserCircle className="text-stone-400" size={24} />
-                  <span>{emp.name}</span>
+                <td className="p-4 font-medium text-stone-800">
+                  <div className="flex items-center space-x-3">
+                    <UserCircle className="text-stone-400 shrink-0" size={24} />
+                    <span>{emp.name}</span>
+                  </div>
                 </td>
                 <td className="p-4 text-stone-600">{emp.role}</td>
                 <td className="p-4">

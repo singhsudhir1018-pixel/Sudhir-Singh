@@ -256,7 +256,7 @@ export default function UserManagement() {
       {/* Users Table */}
       <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse [&_th]:border [&_th]:border-stone-200 [&_td]:border [&_td]:border-stone-200">
             <thead>
               <tr className="bg-stone-50 text-stone-500 text-sm border-b border-stone-200">
                 <th className="p-4 font-medium">{t.fullName || 'Name'}</th>

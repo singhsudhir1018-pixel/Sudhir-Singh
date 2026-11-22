@@ -127,13 +127,13 @@ export default function Leases() {
       
       <div className="bg-white rounded-2xl border border-stone-200 shadow-sm ">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse [&_th]:border [&_th]:border-stone-200 [&_td]:border [&_td]:border-stone-200">
             <thead>
               <tr className="bg-stone-50 border-b border-stone-200">
                 <th className="py-3 px-4 text-sm font-semibold text-stone-600">{t.titleId || 'Title'}</th>
                 <th className="py-3 px-4 text-sm font-semibold text-stone-600">{t.totalArea || 'Area / Ponds'}</th>
                 <th className="py-3 px-4 text-sm font-semibold text-stone-600">{t.lessorName || 'Lessor'}</th>
-                <th className="py-3 px-4 text-sm font-semibold text-stone-600">{t.duration || 'Duration'}</th>
+                <th className="py-3 px-2.5 w-px whitespace-nowrap text-xs sm:text-sm font-semibold text-stone-600">{t.duration || 'Duration'}</th>
                 <th className="py-3 px-4 text-sm font-semibold text-stone-600 text-center">{t.documents || 'Document'}</th>
                 <th className="py-3 px-4 text-sm font-semibold text-stone-600">{t.totalLeaseAmount || 'Amount (Rs.)'}</th>
                 <th className="py-3 px-4 text-sm font-semibold text-stone-600 text-right">{t.actions || 'Actions'}</th>
@@ -157,7 +157,7 @@ export default function Leases() {
                   <td className="py-3 px-4 text-sm text-stone-800">
                     {lease.lessorName}
                   </td>
-                  <td className="py-3 px-4 text-sm text-stone-800">
+                  <td className="py-3 px-2.5 w-px whitespace-nowrap text-xs sm:text-sm text-stone-800">
                     {lease.startDateBS} - {lease.endDateBS}
                   </td>
                   <td className="py-3 px-4 text-center">
@@ -186,7 +186,7 @@ export default function Leases() {
               ))}
               {leases.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="text-center p-12 text-stone-500 bg-stone-50/50">
+                  <td colSpan={7} className="text-center p-12 text-stone-500 bg-stone-50/50">
                     {t.noActiveLeases || 'No active leases found.'}
                   </td>
                 </tr>
@@ -198,8 +198,8 @@ export default function Leases() {
 
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl">
+        <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center p-3 sm:p-4 z-50">
+          <div className="bg-white rounded-2xl w-full max-w-md max-h-[92dvh] overflow-y-auto p-5 sm:p-6 shadow-xl">
             <h2 className="text-xl font-bold mb-4">{editingId ? t.edit || "Edit Lease" : t.addLease}</h2>
             <form onSubmit={handleSave} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">

@@ -389,7 +389,7 @@ export default function CategoryManagement() {
       {/* Categories TABLE Format */}
       <div className="bg-white border border-stone-200 rounded-2xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse [&_th]:border [&_th]:border-stone-200 [&_td]:border [&_td]:border-stone-200">
             <thead>
               <tr className="bg-stone-50/90 border-b border-stone-200 text-stone-700 text-xs font-bold uppercase tracking-wider">
                 <th className="py-3.5 px-4 w-14 text-center">

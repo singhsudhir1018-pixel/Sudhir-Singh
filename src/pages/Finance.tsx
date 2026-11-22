@@ -143,31 +143,53 @@ export default function Finance() {
   };
 
   const handleDelete = async (tx: Transaction) => {
-    if (!window.confirm("Are you sure you want to delete this transaction? This will automatically reverse the linked bank/cash account balance.")) return;
+    if (!window.confirm(language === 'ne' ? 'के तपाईं यो कारोबार मेटाउन चाहनुहुन्छ? यसले सम्बन्धित खाता र पार्टीको बाँकी रकम स्वतः सच्याउनेछ।' : 'Are you sure you want to delete this transaction? This will automatically reverse the linked account and party balance.')) return;
     
     try {
       await runTransaction(db, async (transaction) => {
         const txRef = doc(db, 'transactions', tx.id);
         const txDoc = await transaction.get(txRef);
-        if (!txDoc.exists()) throw "Transaction does not exist!";
+        if (!txDoc.exists()) throw new Error('Transaction does not exist!');
 
-        if (tx.accountId) {
-          const accountRef = doc(db, 'bankAccounts', tx.accountId);
-          const accountDoc = await transaction.get(accountRef);
-          if (accountDoc.exists()) {
-            const accData = accountDoc.data();
-            let newBalance = accData.balance;
-            if (tx.type === 'INCOME') newBalance -= tx.amount;
-            else if (tx.type === 'EXPENSE') newBalance += tx.amount;
-            transaction.update(accountRef, { balance: newBalance });
-          }
+        const txData = txDoc.data() as Transaction;
+        let accountRef = null;
+        let accountDoc = null;
+        if (txData.accountId && txData.paymentMethod !== 'CREDIT') {
+          accountRef = doc(db, 'bankAccounts', txData.accountId);
+          accountDoc = await transaction.get(accountRef);
         }
+
+        let partyRef = null;
+        let partyDoc = null;
+        if (txData.partyId) {
+          partyRef = doc(db, 'parties', txData.partyId);
+          partyDoc = await transaction.get(partyRef);
+        }
+
+        if (accountRef && accountDoc && accountDoc.exists()) {
+          const accData = accountDoc.data();
+          let newBalance = Number(accData.currentBalance ?? accData.balance ?? 0);
+          if (txData.type === 'INCOME' || txData.type === 'CAPITAL_INFLOW') newBalance -= Number(txData.amount) || 0;
+          else if (txData.type === 'EXPENSE') newBalance += Number(txData.amount) || 0;
+          transaction.update(accountRef, { currentBalance: newBalance });
+        }
+
+        if (partyRef && partyDoc && partyDoc.exists()) {
+          const amt = Number(txData.amount) || 0;
+          const effect = txData.partyBalanceEffect;
+          let delta = 0;
+          if (effect === 'ADD_DUE') delta = amt;
+          else if (effect === 'REDUCE_DUE') delta = -amt;
+          else if (effect !== 'NONE') delta = txData.paymentMethod === 'CREDIT' ? amt : -amt;
+
+          const curPending = Number(partyDoc.data().pendingBalance) || 0;
+          transaction.update(partyRef, { pendingBalance: curPending - delta });
+        }
+
         transaction.delete(txRef);
       });
-      // Optionally show toast
     } catch (err) {
-      console.error("Delete failed: ", err);
-      alert('Failed to delete transaction.');
+      console.error('Delete failed: ', err);
     }
   };
 
@@ -240,11 +262,11 @@ export default function Finance() {
            </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse [&_th]:border [&_th]:border-stone-200 [&_td]:border [&_td]:border-stone-200">
             <thead>
               <tr className="bg-stone-50 border-b border-stone-200 text-stone-500 font-medium text-sm">
-                <th className="p-4 w-16">{t.sn}</th>
-                <th className="p-4">{t.dateBS}</th>
+                <th className="px-2.5 py-3 w-px whitespace-nowrap">{t.sn}</th>
+                <th className="px-2.5 py-3 w-px whitespace-nowrap">{t.dateBS}</th>
                 <th className="p-4">{t.type}</th>
                 <th className="p-4">{language === 'ne' ? 'उप-वर्ग' : 'Sub-Category'}</th>
                 <th className="p-4">{t.partyOrPartner || 'Party / Partner'}</th>
@@ -261,8 +283,8 @@ export default function Finance() {
                    
                    return (
                     <tr key={tx.id || idx} className="border-b border-stone-100 hover:bg-stone-50 print:border-stone-200">
-                      <td className="p-4 text-stone-600">{idx + 1}</td>
-                      <td className="p-4 text-stone-600 whitespace-nowrap">{tx.dateBS}</td>
+                      <td className="px-2.5 py-3 w-px whitespace-nowrap text-center text-stone-600 text-xs sm:text-sm">{idx + 1}</td>
+                      <td className="px-2.5 py-3 w-px whitespace-nowrap text-stone-600 text-xs sm:text-sm">{tx.dateBS}</td>
                       <td className="p-4">
                         <span className={`px-2 py-1 text-xs rounded-full font-medium ${tx.type === 'INCOME' ? 'bg-emerald-100 text-emerald-700' : tx.type === 'EXPENSE' ? 'bg-rose-100 text-rose-700' : 'bg-indigo-100 text-indigo-700'}`}>
                           {tx.type === 'INCOME' ? t.income : tx.type === 'EXPENSE' ? t.expense : (t.capitalInflow || 'Capital')}

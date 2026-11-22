@@ -69,7 +69,7 @@ export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss(), aistudioMediaPlugin(), VitePWA({
       registerType: 'autoUpdate',
-      devOptions: { enabled: true },
+      devOptions: { enabled: false },
       manifest: {
         id: '/',
         name: 'AgriFarm Management System',

@@ -119,7 +119,7 @@ export default function Inventory() {
       </div>
 
       <div className="bg-white rounded-2xl border border-stone-200 shadow-sm  overflow-x-auto">
-        <table className="w-full text-left border-collapse min-w-[800px]">
+        <table className="w-full text-left border-collapse min-w-[800px] [&_th]:border [&_th]:border-stone-200 [&_td]:border [&_td]:border-stone-200">
           <thead>
             <tr className="bg-stone-50 border-b border-stone-200 text-stone-500 font-medium text-sm">
               <th className="p-4 w-16">{t.sn}</th>
@@ -174,7 +174,7 @@ export default function Inventory() {
             })}
             {inventory.length === 0 && (
               <tr>
-                <td colSpan={6} className="p-8 text-center text-stone-500">{t.noData}</td>
+                <td colSpan={7} className="p-8 text-center text-stone-500">{t.noData}</td>
               </tr>
             )}
           </tbody>
@@ -182,16 +182,16 @@ export default function Inventory() {
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl w-full max-w-2xl  shadow-xl">
-            <div className="flex justify-between items-center p-6 border-b border-stone-100">
-              <h2 className="text-xl font-bold text-stone-800">{editingId ? t.edit : t.addItem}</h2>
+        <div className="fixed inset-0 bg-stone-900/50 flex items-center justify-center p-3 sm:p-4 z-50">
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[92dvh] flex flex-col shadow-xl overflow-hidden">
+            <div className="flex justify-between items-center p-4 sm:p-6 border-b border-stone-100 shrink-0">
+              <h2 className="text-lg sm:text-xl font-bold text-stone-800">{editingId ? t.edit : t.addItem}</h2>
               <button onClick={() => setIsModalOpen(false)} className="text-stone-400 hover:text-stone-600 p-1">
                 <X size={20} />
               </button>
             </div>
             
-            <form onSubmit={handleSave} className="p-6 space-y-4">
+            <form onSubmit={handleSave} className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
               <div>
                   <label className="block text-sm font-medium text-stone-700 mb-1">{t.itemName}</label>
                   <input
@@ -212,7 +212,7 @@ export default function Inventory() {
                   required
                 />
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-stone-700 mb-1">{t.currentStock}</label>
                   <input 
@@ -249,7 +249,7 @@ export default function Inventory() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-stone-700 mb-1">{t.unitPrice} (Optional)</label>
                   <input 
