@@ -79,9 +79,9 @@ export default function Accounts() {
     return () => { unsubAcc(); unsubTrans(); unsubTx(); unsubPartners(); };
   }, [farmId]);
 
-  // Real-time Total Investment, Total Expense, and remaining Cash & Bank
+  // Real-time Total Investment, Paid Total Expense, and remaining Cash & Bank
   const totalInvestment = partners.reduce((sum, p) => sum + (Number(p.investmentAmount) || 0), 0);
-  const totalExpense = transactions.filter(t => t.type === 'EXPENSE').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+  const totalExpense = transactions.filter(t => t.type === 'EXPENSE' && t.paymentMethod !== 'CREDIT').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
   const remainingCashBank = totalInvestment - totalExpense;
 
   const totalBank = accounts.filter(a => a.type === 'BANK' || a.type === 'WALLET').reduce((sum, a) => sum + Math.max(0, Number(a.currentBalance) || 0), 0);

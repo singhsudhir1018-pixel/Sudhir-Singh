@@ -138,8 +138,8 @@ export default function LivestockBatches() {
     purchaseTotalCost: '',
     status: 'ACTIVE' as 'ACTIVE' | 'COMPLETED',
     notes: '',
-    alsoRecordExpense: true,
-    paymentMethod: 'CASH' as 'CASH' | 'BANK' | 'WALLET' | 'CREDIT',
+    addCreditDueToSupplier: false,
+    paymentMethod: 'CASH' as 'CASH' | 'BANK' | 'WALLET',
   });
   const [batchError, setBatchError] = useState<string | null>(null);
   const [isSavingBatch, setIsSavingBatch] = useState(false);
@@ -153,8 +153,8 @@ export default function LivestockBatches() {
     partyId: '',
     partyName: '',
     amount: '',
-    paymentMethod: 'CASH' as 'CASH' | 'BANK' | 'WALLET' | 'CREDIT',
-    alsoRecordTransaction: true,
+    paymentMethod: 'CASH' as 'CASH' | 'BANK' | 'WALLET',
+    addCreditDueToParty: false,
     notes: '',
   });
   const [eventError, setEventError] = useState<string | null>(null);
@@ -371,7 +371,7 @@ export default function LivestockBatches() {
       purchaseTotalCost: '',
       status: 'ACTIVE',
       notes: '',
-      alsoRecordExpense: true,
+      addCreditDueToSupplier: false,
       paymentMethod: 'CASH',
     });
     setBatchError(null);
@@ -391,7 +391,7 @@ export default function LivestockBatches() {
       purchaseTotalCost: b.purchaseTotalCost ? b.purchaseTotalCost.toString() : '',
       status: b.status || 'ACTIVE',
       notes: b.notes || '',
-      alsoRecordExpense: false,
+      addCreditDueToSupplier: false,
       paymentMethod: 'CASH',
     });
     setBatchError(null);
@@ -413,8 +413,8 @@ export default function LivestockBatches() {
     });
   };
 
-  const handleSaveBatch = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveBatch = async (e: React.FormEvent | null, saveMode: 'SAVE_ONLY' | 'SAVE_AND_TX' = 'SAVE_ONLY') => {
+    if (e) e.preventDefault();
     if (!farmId || isSavingBatch) return;
 
     const initialQty = Number(batchForm.initialCount);
@@ -464,15 +464,27 @@ export default function LivestockBatches() {
           notes: batchForm.notes.trim(),
         });
       } else {
+        const totalCostVal = Number(batchForm.purchaseTotalCost) || 0;
+        if (saveMode === 'SAVE_AND_TX' && totalCostVal <= 0) {
+          setBatchError(
+            language === 'ne'
+              ? 'Transaction मा थप्नको लागि जम्मा खरिद रकम (Rs.) लेख्नुहोस्।'
+              : 'Please enter Total Purchase Cost (Rs.) to add to Transactions.'
+          );
+          setIsSavingBatch(false);
+          return;
+        }
+
         await runTransaction(db, async (transaction) => {
           const batchRef = doc(collection(db, 'batches'));
           const logRef = doc(collection(db, 'livestockLogs'));
-          const shouldCreateTx = batchForm.alsoRecordExpense && totalCost > 0;
+          const shouldCreateTx = saveMode === 'SAVE_AND_TX' && totalCost > 0;
+          const shouldAddCreditOnly = saveMode === 'SAVE_ONLY' && batchForm.addCreditDueToSupplier && Boolean(batchForm.supplierId) && totalCost > 0;
 
           let accRef: any = null;
           let accDoc: any = null;
           let resolvedAccountId = '';
-          if (shouldCreateTx && batchForm.paymentMethod !== 'CREDIT') {
+          if (shouldCreateTx) {
             const match = accounts.find((a) => a.type === batchForm.paymentMethod);
             if (match) {
               resolvedAccountId = match.id;
@@ -483,7 +495,7 @@ export default function LivestockBatches() {
 
           let supRef: any = null;
           let supDoc: any = null;
-          if (shouldCreateTx && batchForm.supplierId && batchForm.paymentMethod === 'CREDIT') {
+          if (shouldAddCreditOnly && batchForm.supplierId) {
             supRef = doc(db, 'parties', batchForm.supplierId);
             supDoc = await transaction.get(supRef);
           }
@@ -493,7 +505,7 @@ export default function LivestockBatches() {
             const txRef = doc(collection(db, 'transactions'));
             txId = txRef.id;
 
-            if (batchForm.paymentMethod !== 'CREDIT' && !resolvedAccountId) {
+            if (!resolvedAccountId) {
               accRef = doc(collection(db, 'bankAccounts'));
               transaction.set(accRef, {
                 farmId,
@@ -513,11 +525,6 @@ export default function LivestockBatches() {
               });
             }
 
-            if (supDoc && supDoc.exists() && batchForm.paymentMethod === 'CREDIT') {
-              const curBal = Number(supDoc.data().pendingBalance) || 0;
-              transaction.update(supRef, { pendingBalance: curBal + totalCost });
-            }
-
             transaction.set(txRef, {
               farmId,
               type: 'EXPENSE',
@@ -528,12 +535,15 @@ export default function LivestockBatches() {
               batchId: batchRef.id,
               accountId: resolvedAccountId,
               paymentMethod: batchForm.paymentMethod,
-              partyBalanceEffect: batchForm.supplierId && batchForm.paymentMethod === 'CREDIT' ? 'ADD_DUE' : 'NONE',
+              partyBalanceEffect: 'NONE',
               dateBS: batchForm.startDateBS,
               notes: `[Batch Purchase] ${batchForm.batchName.trim()} (${initialQty} pcs)${batchForm.notes.trim() ? ` - ${batchForm.notes.trim()}` : ''}`,
               createdAt: Date.now(),
               createdBy: 'user',
             });
+          } else if (shouldAddCreditOnly && supDoc && supDoc.exists()) {
+            const curBal = Number(supDoc.data().pendingBalance) || 0;
+            transaction.update(supRef, { pendingBalance: curBal + totalCost });
           }
 
           transaction.set(batchRef, {
@@ -569,7 +579,7 @@ export default function LivestockBatches() {
             partyId: batchForm.supplierId || '',
             partyName: resolvedSupplierName,
             amount: totalCost,
-            notes: batchForm.notes.trim() || (language === 'ne' ? 'प्रारम्भिक खरिद' : 'Initial purchase'),
+            notes: batchForm.notes.trim() || (shouldAddCreditOnly ? (language === 'ne' ? 'प्रारम्भिक खरिद (उधारो)' : 'Initial purchase (Credit)') : (language === 'ne' ? 'प्रारम्भिक खरिद' : 'Initial purchase')),
             transactionId: txId,
             createdAt: Date.now(),
           });
@@ -597,14 +607,14 @@ export default function LivestockBatches() {
       partyName: type === 'ADDITION' ? batch.supplierName || '' : '',
       amount: '',
       paymentMethod: 'CASH',
-      alsoRecordTransaction: true,
+      addCreditDueToParty: false,
       notes: '',
     });
     setEventError(null);
   };
 
-  const handleSaveEvent = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveEvent = async (e: React.FormEvent | null, saveMode: 'SAVE_ONLY' | 'SAVE_AND_TX' = 'SAVE_ONLY') => {
+    if (e) e.preventDefault();
     if (!farmId || !eventTargetBatch || isSavingEvent) return;
 
     const qty = Number(eventForm.quantity);
@@ -625,6 +635,15 @@ export default function LivestockBatches() {
     }
 
     const amount = Number(eventForm.amount) || 0;
+    if ((eventType === 'ADDITION' || eventType === 'SALE') && saveMode === 'SAVE_AND_TX' && amount <= 0) {
+      setEventError(
+        language === 'ne'
+          ? 'Transaction मा थप्नको लागि रकम (Rs.) लेख्नुहोस्।'
+          : 'Please enter Amount (Rs.) to record in Transactions.'
+      );
+      return;
+    }
+
     const selectedParty = parties.find((p) => p.id === eventForm.partyId);
     const resolvedPartyName = selectedParty ? selectedParty.name : eventForm.partyName.trim();
 
@@ -653,12 +672,18 @@ export default function LivestockBatches() {
         }
 
         const shouldRecordTx =
-          (eventType === 'SALE' || eventType === 'ADDITION') && eventForm.alsoRecordTransaction && amount > 0;
+          (eventType === 'SALE' || eventType === 'ADDITION') && saveMode === 'SAVE_AND_TX' && amount > 0;
+        const shouldAddCreditOnly =
+          (eventType === 'SALE' || eventType === 'ADDITION') &&
+          saveMode === 'SAVE_ONLY' &&
+          eventForm.addCreditDueToParty &&
+          Boolean(eventForm.partyId) &&
+          amount > 0;
 
         let accRef: any = null;
         let accDoc: any = null;
         let resolvedAccountId = '';
-        if (shouldRecordTx && eventForm.paymentMethod !== 'CREDIT') {
+        if (shouldRecordTx) {
           const match = accounts.find((a) => a.type === eventForm.paymentMethod);
           if (match) {
             resolvedAccountId = match.id;
@@ -669,7 +694,7 @@ export default function LivestockBatches() {
 
         let partyRef: any = null;
         let partyDoc: any = null;
-        if (shouldRecordTx && eventForm.partyId && eventForm.paymentMethod === 'CREDIT') {
+        if (shouldAddCreditOnly && eventForm.partyId) {
           partyRef = doc(db, 'parties', eventForm.partyId);
           partyDoc = await transaction.get(partyRef);
         }
@@ -690,7 +715,6 @@ export default function LivestockBatches() {
           }
         }
 
-        // Auto-mark completed if alive becomes 0 on sale? Keep user in control, don't force close unless they edit.
         transaction.update(batchRef, updatePayload);
 
         let txId = '';
@@ -699,7 +723,7 @@ export default function LivestockBatches() {
           txId = txRef.id;
           const isIncome = eventType === 'SALE';
 
-          if (eventForm.paymentMethod !== 'CREDIT' && !resolvedAccountId) {
+          if (!resolvedAccountId) {
             accRef = doc(collection(db, 'bankAccounts'));
             transaction.set(accRef, {
               farmId,
@@ -720,11 +744,6 @@ export default function LivestockBatches() {
             });
           }
 
-          if (partyDoc && partyDoc.exists() && eventForm.paymentMethod === 'CREDIT') {
-            const curPending = Number(partyDoc.data().pendingBalance) || 0;
-            transaction.update(partyRef, { pendingBalance: curPending + amount });
-          }
-
           const spLabel = getSpeciesMeta(currentBatch.species).labelEn;
           transaction.set(txRef, {
             farmId,
@@ -736,12 +755,15 @@ export default function LivestockBatches() {
             batchId: eventTargetBatch.id,
             accountId: resolvedAccountId,
             paymentMethod: eventForm.paymentMethod,
-            partyBalanceEffect: eventForm.partyId && eventForm.paymentMethod === 'CREDIT' ? 'ADD_DUE' : 'NONE',
+            partyBalanceEffect: 'NONE',
             dateBS: eventForm.dateBS,
             notes: `${isIncome ? 'Sale' : 'Added Stock'}: ${currentBatch.batchName} (${qty} pcs)${eventForm.notes.trim() ? ` - ${eventForm.notes.trim()}` : ''}`,
             createdAt: Date.now(),
             createdBy: 'user',
           });
+        } else if (shouldAddCreditOnly && partyDoc && partyDoc.exists()) {
+          const curPending = Number(partyDoc.data().pendingBalance) || 0;
+          transaction.update(partyRef, { pendingBalance: curPending + amount });
         }
 
         const logRef = doc(collection(db, 'livestockLogs'));
@@ -756,8 +778,9 @@ export default function LivestockBatches() {
           partyId: eventForm.partyId || '',
           partyName: resolvedPartyName,
           amount,
-          notes: eventForm.notes.trim(),
+          notes: eventForm.notes.trim() || (shouldAddCreditOnly ? (language === 'ne' ? 'उधारो' : 'Credit') : ''),
           transactionId: txId,
+          ...(shouldAddCreditOnly ? { creditOnlyPartyId: eventForm.partyId } : {}),
           createdAt: Date.now(),
         });
       });
@@ -797,6 +820,12 @@ export default function LivestockBatches() {
           }
         }
 
+        let creditOnlyPartySnap: any = null;
+        const creditOnlyPartyId = (log as any).creditOnlyPartyId;
+        if (creditOnlyPartyId && log.amount) {
+          creditOnlyPartySnap = await transaction.get(doc(db, 'parties', creditOnlyPartyId));
+        }
+
         if (batchSnap.exists()) {
           const bd = batchSnap.data() as Batch;
           const updates: Record<string, any> = {};
@@ -825,6 +854,10 @@ export default function LivestockBatches() {
             });
           }
           transaction.delete(txSnap.ref);
+        } else if (creditOnlyPartySnap && creditOnlyPartySnap.exists() && log.amount) {
+          transaction.update(creditOnlyPartySnap.ref, {
+            pendingBalance: (Number(creditOnlyPartySnap.data().pendingBalance) || 0) - log.amount,
+          });
         }
 
         transaction.delete(doc(db, 'livestockLogs', log.id));
@@ -1188,7 +1221,7 @@ export default function LivestockBatches() {
               </button>
             </div>
 
-            <form onSubmit={handleSaveBatch} className="p-5 space-y-4">
+            <form onSubmit={(e) => handleSaveBatch(e, 'SAVE_ONLY')} className="p-5 space-y-4">
               {batchError && (
                 <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-xl flex items-center gap-2">
                   <AlertCircle size={16} className="shrink-0" />
@@ -1356,21 +1389,15 @@ export default function LivestockBatches() {
               </div>
 
               {!editingBatch && Number(batchForm.purchaseTotalCost) > 0 && (
-                <div className="p-3.5 bg-emerald-50/70 border border-emerald-200 rounded-xl space-y-2.5">
-                  <label className="flex items-start gap-2.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={batchForm.alsoRecordExpense}
-                      onChange={(e) => setBatchForm({ ...batchForm, alsoRecordExpense: e.target.checked })}
-                      className="mt-0.5 rounded border-emerald-400 text-emerald-600 focus:ring-emerald-500"
-                    />
-                    <span className="text-xs font-semibold text-emerald-900">
-                      {t.alsoRecordExpense || 'Also record purchase in Transactions & Supplier Khata'}
-                    </span>
-                  </label>
-                  {batchForm.alsoRecordExpense && (
-                    <div className="grid grid-cols-4 gap-1.5 pt-1">
-                      {(['CASH', 'BANK', 'WALLET', 'CREDIT'] as const).map((pm) => (
+                <div className="p-3.5 bg-stone-50 border border-stone-200 rounded-xl space-y-3">
+                  <div>
+                    <div className="text-xs font-bold text-stone-700 mb-1.5">
+                      {language === 'ne'
+                        ? 'भुक्तानी माध्यम (यदि Transaction मा थप्ने हो भने):'
+                        : 'Payment Account (if clicking "Save & Add to Transaction"):'}
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {(['CASH', 'BANK', 'WALLET'] as const).map((pm) => (
                         <button
                           type="button"
                           key={pm}
@@ -1378,19 +1405,34 @@ export default function LivestockBatches() {
                           className={`py-1.5 px-2 rounded-lg text-xs font-semibold border transition-colors ${
                             batchForm.paymentMethod === pm
                               ? 'bg-emerald-600 text-white border-emerald-600'
-                              : 'bg-white text-stone-600 border-stone-200'
+                              : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-100'
                           }`}
                         >
-                          {pm === 'CASH'
-                            ? t.cash || 'Cash'
-                            : pm === 'BANK'
-                            ? t.bank || 'Bank'
-                            : pm === 'WALLET'
-                            ? t.wallet || 'Wallet'
-                            : t.credit || 'Credit'}
+                          {pm === 'CASH' ? t.cash || 'Cash' : pm === 'BANK' ? t.bank || 'Bank' : t.wallet || 'Wallet'}
                         </button>
                       ))}
                     </div>
+                  </div>
+
+                  {batchForm.supplierId && (
+                    <label className="flex items-start gap-2.5 pt-2 border-t border-stone-200 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={batchForm.addCreditDueToSupplier}
+                        onChange={(e) => setBatchForm({ ...batchForm, addCreditDueToSupplier: e.target.checked })}
+                        className="mt-0.5 rounded border-stone-400 text-amber-600 focus:ring-amber-500"
+                      />
+                      <span className="text-xs text-stone-700 leading-relaxed">
+                        <strong className="text-amber-800">
+                          {language === 'ne'
+                            ? 'उधारो हो (भुक्तानी बाँकी)? '
+                            : 'Bought on Credit (Unpaid)? '}
+                        </strong>
+                        {language === 'ne'
+                          ? 'आपूर्तिकर्ताको "तिर्न बाँकी" खातामा मात्र जोड्नुहोस् र तल "सेभ मात्र गर्नुहोस्" थिच्नुहोस् (Transaction मा नराख्ने, नगद/बैंक ब्यालेन्स बिग्रँदैन)। पछि पैसा तिर्दा मात्र Transaction मा देखिनेछ।'
+                          : 'Add to Supplier Payable (Khata) only and click "Save Only" below (keeps Transactions & Cash/Bank balance clean until paid).'}
+                      </span>
+                    </label>
                   )}
                 </div>
               )}
@@ -1424,7 +1466,7 @@ export default function LivestockBatches() {
                 />
               </div>
 
-              <div className="flex justify-end gap-3 pt-2 border-t border-stone-100">
+              <div className="flex flex-wrap justify-end gap-2.5 pt-3 border-t border-stone-100">
                 <button
                   type="button"
                   onClick={() => setIsBatchModalOpen(false)}
@@ -1432,13 +1474,48 @@ export default function LivestockBatches() {
                 >
                   {t.cancel || 'Cancel'}
                 </button>
-                <button
-                  type="submit"
-                  disabled={isSavingBatch}
-                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm disabled:opacity-50"
-                >
-                  {isSavingBatch ? t.saving || 'Saving...' : t.save || 'Save'}
-                </button>
+                {editingBatch ? (
+                  <button
+                    type="submit"
+                    disabled={isSavingBatch}
+                    className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm disabled:opacity-50"
+                  >
+                    {isSavingBatch ? t.saving || 'Saving...' : t.save || 'Save'}
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="submit"
+                      disabled={isSavingBatch}
+                      className="px-4 py-2.5 rounded-xl border border-emerald-600 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 font-semibold text-sm disabled:opacity-50"
+                    >
+                      {isSavingBatch
+                        ? t.saving || 'Saving...'
+                        : language === 'ne'
+                        ? 'सेभ मात्र गर्नुहोस्'
+                        : 'Save Only'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isSavingBatch || Number(batchForm.purchaseTotalCost) <= 0}
+                      onClick={() => handleSaveBatch(null, 'SAVE_AND_TX')}
+                      title={
+                        Number(batchForm.purchaseTotalCost) <= 0
+                          ? language === 'ne'
+                            ? 'पहिले जम्मा खरिद रकम लेख्नुहोस्'
+                            : 'Enter Total Purchase Cost first'
+                          : ''
+                      }
+                      className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm disabled:opacity-50"
+                    >
+                      {isSavingBatch
+                        ? t.saving || 'Saving...'
+                        : language === 'ne'
+                        ? 'सेभ र Transaction मा थप्नुहोस्'
+                        : 'Save & Add to Transaction'}
+                    </button>
+                  </>
+                )}
               </div>
             </form>
           </div>
@@ -1471,7 +1548,7 @@ export default function LivestockBatches() {
               </button>
             </div>
 
-            <form onSubmit={handleSaveEvent} className="p-5 space-y-4">
+            <form onSubmit={(e) => handleSaveEvent(e, 'SAVE_ONLY')} className="p-5 space-y-4">
               {eventError && (
                 <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-xl flex items-center gap-2">
                   <AlertCircle size={16} className="shrink-0" />
@@ -1593,24 +1670,14 @@ export default function LivestockBatches() {
 
                   {Number(eventForm.amount) > 0 && (
                     <div className="p-3 bg-stone-50 border border-stone-200 rounded-xl space-y-2.5">
-                      <label className="flex items-start gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={eventForm.alsoRecordTransaction}
-                          onChange={(e) =>
-                            setEventForm({ ...eventForm, alsoRecordTransaction: e.target.checked })
-                          }
-                          className="mt-0.5 rounded border-stone-400 text-emerald-600 focus:ring-emerald-500"
-                        />
-                        <span className="text-xs font-semibold text-stone-700">
-                          {eventType === 'SALE'
-                            ? t.alsoRecordIncome || 'Also record sale income in Transactions & Buyer Khata'
-                            : t.alsoRecordExpense || 'Also record purchase in Transactions & Supplier Khata'}
-                        </span>
-                      </label>
-                      {eventForm.alsoRecordTransaction && (
-                        <div className="grid grid-cols-4 gap-1.5">
-                          {(['CASH', 'BANK', 'WALLET', 'CREDIT'] as const).map((pm) => (
+                      <div>
+                        <div className="text-xs font-bold text-stone-700 mb-1.5">
+                          {language === 'ne'
+                            ? 'भुक्तानी माध्यम (यदि Transaction मा थप्ने हो भने):'
+                            : 'Payment Account (if clicking "Save & Add to Transaction"):'}
+                        </div>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {(['CASH', 'BANK', 'WALLET'] as const).map((pm) => (
                             <button
                               type="button"
                               key={pm}
@@ -1625,12 +1692,28 @@ export default function LivestockBatches() {
                                 ? t.cash || 'Cash'
                                 : pm === 'BANK'
                                 ? t.bank || 'Bank'
-                                : pm === 'WALLET'
-                                ? t.wallet || 'Wallet'
-                                : t.credit || 'Credit'}
+                                : t.wallet || 'Wallet'}
                             </button>
                           ))}
                         </div>
+                      </div>
+
+                      {eventForm.partyId && (
+                        <label className="flex items-start gap-2 pt-2 border-t border-stone-200 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={eventForm.addCreditDueToParty}
+                            onChange={(e) =>
+                              setEventForm({ ...eventForm, addCreditDueToParty: e.target.checked })
+                            }
+                            className="mt-0.5 rounded border-stone-400 text-amber-600 focus:ring-amber-500"
+                          />
+                          <span className="text-xs text-stone-700">
+                            {language === 'ne'
+                              ? 'उधारो हो भने "सेभ मात्र गर्नुहोस्" थिच्दा पार्टीको खातामा मात्र जोड्नुहोस् (Transaction नबनाई)'
+                              : 'If unpaid/credit, add to Party Khata only when clicking "Save Only" (no Transaction created)'}
+                          </span>
+                        </label>
                       )}
                     </div>
                   )}
@@ -1650,7 +1733,7 @@ export default function LivestockBatches() {
                 </>
               )}
 
-              <div className="flex justify-end gap-3 pt-2 border-t border-stone-100">
+              <div className="flex flex-wrap justify-end gap-2.5 pt-2 border-t border-stone-100">
                 <button
                   type="button"
                   onClick={() => setEventTargetBatch(null)}
@@ -1658,19 +1741,45 @@ export default function LivestockBatches() {
                 >
                   {t.cancel || 'Cancel'}
                 </button>
-                <button
-                  type="submit"
-                  disabled={isSavingEvent}
-                  className={`px-5 py-2.5 rounded-xl text-white font-semibold text-sm disabled:opacity-50 ${
-                    eventType === 'MORTALITY'
-                      ? 'bg-rose-600 hover:bg-rose-700'
-                      : eventType === 'SALE'
-                      ? 'bg-indigo-600 hover:bg-indigo-700'
-                      : 'bg-sky-600 hover:bg-sky-700'
-                  }`}
-                >
-                  {isSavingEvent ? t.saving || 'Saving...' : t.save || 'Save'}
-                </button>
+                {eventType === 'MORTALITY' ? (
+                  <button
+                    type="submit"
+                    disabled={isSavingEvent}
+                    className="px-5 py-2.5 rounded-xl text-white font-semibold text-sm disabled:opacity-50 bg-rose-600 hover:bg-rose-700"
+                  >
+                    {isSavingEvent ? t.saving || 'Saving...' : t.save || 'Save'}
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="submit"
+                      disabled={isSavingEvent}
+                      className="px-4 py-2.5 rounded-xl border border-emerald-600 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 font-semibold text-sm disabled:opacity-50"
+                    >
+                      {isSavingEvent
+                        ? t.saving || 'Saving...'
+                        : language === 'ne'
+                        ? 'सेभ मात्र गर्नुहोस्'
+                        : 'Save Only'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isSavingEvent || Number(eventForm.amount) <= 0}
+                      onClick={() => handleSaveEvent(null, 'SAVE_AND_TX')}
+                      className={`px-4 py-2.5 rounded-xl text-white font-semibold text-sm disabled:opacity-50 ${
+                        eventType === 'SALE'
+                          ? 'bg-indigo-600 hover:bg-indigo-700'
+                          : 'bg-sky-600 hover:bg-sky-700'
+                      }`}
+                    >
+                      {isSavingEvent
+                        ? t.saving || 'Saving...'
+                        : language === 'ne'
+                        ? 'सेभ र Transaction मा थप्नुहोस्'
+                        : 'Save & Add to Transaction'}
+                    </button>
+                  </>
+                )}
               </div>
             </form>
           </div>

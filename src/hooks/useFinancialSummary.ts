@@ -177,13 +177,13 @@ export function useFinancialSummary(overrideFarmId?: string): FinancialSummaryDa
   const bankAccounts = activeAccounts.filter((a) => a.type === 'BANK');
   const walletAccounts = activeAccounts.filter((a) => a.type === 'WALLET');
 
-  // Real-time Total Investment and Total Expense
+  // Real-time Total Investment and Paid Total Expense (exclude unpaid CREDIT expenses from cash/bank deduction)
   const totalInvestment = partners.reduce((sum, p) => sum + (Number(p.investmentAmount) || 0), 0);
   const totalExpense = transactions
-    .filter((t) => t.type === 'EXPENSE')
+    .filter((t) => t.type === 'EXPENSE' && t.paymentMethod !== 'CREDIT')
     .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
 
-  // Cash & Bank balance: Total Investment - Total Expense
+  // Cash & Bank balance: Total Investment - Paid Total Expense
   const totalCashBankBalance = totalInvestment - totalExpense;
 
   // Tracked balances in Bank and Wallet accounts
