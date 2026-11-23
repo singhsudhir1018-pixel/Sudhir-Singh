@@ -6,11 +6,13 @@ import SearchableCategorySelect from '../components/SearchableCategorySelect';
 import { translations } from '../lib/translations';
 import NepaliDate from 'nepali-datetime';
 import NepaliDatePicker from '../components/NepaliDatePicker';
-import { Plus, UploadCloud, Save, X, Edit2, Trash2, ArrowUpDown, ArrowDown, ArrowUp, Search } from 'lucide-react';
+import { Plus, UploadCloud, Save, X, Edit2, Trash2, ArrowUpDown, ArrowDown, ArrowUp, Search, Paperclip, Camera as CameraIcon, FileText, Eye } from 'lucide-react';
 import { collection, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, doc, writeBatch, runTransaction, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Transaction, Category, Party, Partner, Batch, BankAccount } from '../types';
 import { sortTransactionsDesc, sortTransactionsAsc } from '../lib/nepaliDateHelper';
+import { uploadReceiptFile } from '../lib/receiptUpload';
+import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 
 function getTxPartyDelta(tx: Pick<Transaction, 'amount' | 'paymentMethod' | 'partyBalanceEffect'>): number {
   const amt = Number(tx.amount) || 0;
@@ -27,6 +29,7 @@ export default function Transactions() {
   const navigate = useNavigate();
   const t = translations[language];
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const billInputRef = useRef<HTMLInputElement>(null);
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -47,6 +50,15 @@ export default function Transactions() {
   const [applyPartyBalance, setApplyPartyBalance] = useState(true);
   
   const [previewTx, setPreviewTx] = useState<Transaction | null>(null);
+  const [pendingReceiptFile, setPendingReceiptFile] = useState<File | null>(null);
+  const [pendingReceiptPreview, setPendingReceiptPreview] = useState<string | null>(null);
+  const [existingReceiptUrl, setExistingReceiptUrl] = useState<string | null>(null);
+  const [existingReceiptName, setExistingReceiptName] = useState<string | null>(null);
+  const [existingReceiptType, setExistingReceiptType] = useState<string | null>(null);
+  const [existingGalleryItemId, setExistingGalleryItemId] = useState<string | null>(null);
+  const [receiptRemoved, setReceiptRemoved] = useState(false);
+  const [isSavingTx, setIsSavingTx] = useState(false);
+  const [billPreviewModal, setBillPreviewModal] = useState<{ url: string; name?: string; type?: string } | null>(null);
 
   const initialForm = {
     type: 'EXPENSE' as 'INCOME' | 'EXPENSE' | 'CAPITAL_INFLOW',
@@ -118,10 +130,65 @@ export default function Transactions() {
     }
   }, [location.state]);
 
+  const resetReceiptStates = () => {
+    setPendingReceiptFile(null);
+    setPendingReceiptPreview(null);
+    setExistingReceiptUrl(null);
+    setExistingReceiptName(null);
+    setExistingReceiptType(null);
+    setExistingGalleryItemId(null);
+    setReceiptRemoved(false);
+  };
+
+  const attachReceiptFile = (file: File) => {
+    setPendingReceiptFile(file);
+    setReceiptRemoved(false);
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onloadend = () => setPendingReceiptPreview(reader.result as string);
+      reader.readAsDataURL(file);
+    } else if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+      setPendingReceiptPreview('PDF_PREVIEW');
+    } else {
+      setPendingReceiptPreview(null);
+    }
+  };
+
+  const handleBillFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      attachReceiptFile(file);
+    }
+    if (billInputRef.current) billInputRef.current.value = '';
+  };
+
+  const handleCameraBillCapture = async () => {
+    try {
+      const photo = await Camera.getPhoto({
+        quality: 85,
+        allowEditing: false,
+        resultType: CameraResultType.DataUrl,
+        source: CameraSource.Prompt,
+      });
+      if (photo?.dataUrl) {
+        const fileName = `bill_${Date.now()}.${photo.format || 'jpg'}`;
+        const res = await fetch(photo.dataUrl);
+        const blob = await res.blob();
+        const file = new File([blob], fileName, { type: `image/${photo.format || 'jpeg'}` });
+        attachReceiptFile(file);
+      }
+    } catch (err: any) {
+      if (err?.message && !err.message.includes('User cancelled')) {
+        console.warn('Camera capture cancelled/error:', err);
+      }
+    }
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    attachReceiptFile(file);
     setParsing(true);
     setOcrNotice(null);
     setIsModalOpen(true);
@@ -156,7 +223,8 @@ export default function Transactions() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!farmId) return;
+    if (!farmId || isSavingTx) return;
+    setIsSavingTx(true);
 
     const amt = Number(formData.amount);
     const hasSelectedParty = Boolean(formData.partyId && parties.some(p => p.id === formData.partyId));
@@ -168,15 +236,66 @@ export default function Transactions() {
       ? 'REDUCE_DUE'
       : 'NONE';
 
-    const payload = {
+    const txDocId = editingId || doc(collection(db, 'transactions')).id;
+
+    const payload: Record<string, any> = {
       ...formData,
       amount: amt,
       partyBalanceEffect,
       farmId,
-      createdBy: 'user', 
+      createdBy: 'user',
     };
 
     try {
+      if (pendingReceiptFile) {
+        const uploaded = await uploadReceiptFile(farmId, pendingReceiptFile);
+        const vendorName = formData.partyId ? getPartyName(formData.partyId) : '';
+        const titleBase = formData.subCategory || formData.category || (formData.type === 'INCOME' ? 'Income Bill' : 'Expense Bill');
+        const galleryTitle = vendorName && vendorName !== '-' ? `${titleBase} - ${vendorName}` : titleBase;
+
+        const galleryData = {
+          farmId,
+          title: galleryTitle,
+          category: formData.category || 'General Receipt',
+          vendorName: vendorName !== '-' ? vendorName : '',
+          dateBS: formData.dateBS,
+          amount: amt,
+          notes: formData.notes || '',
+          fileUrl: uploaded.url,
+          fileName: uploaded.fileName,
+          fileType: uploaded.fileType,
+          fileSize: uploaded.fileSize,
+          storagePath: uploaded.storagePath || null,
+          transactionId: txDocId,
+          createdAt: Date.now(),
+        };
+
+        let galleryId = existingGalleryItemId;
+        if (galleryId) {
+          await updateDoc(doc(db, 'gallery', galleryId), galleryData);
+        } else {
+          const gRef = await addDoc(collection(db, 'gallery'), galleryData);
+          galleryId = gRef.id;
+        }
+
+        payload.receiptUrl = uploaded.url;
+        payload.receiptName = uploaded.fileName;
+        payload.receiptType = uploaded.fileType;
+        payload.receiptStoragePath = uploaded.storagePath || '';
+        payload.galleryItemId = galleryId;
+      } else if (receiptRemoved) {
+        payload.receiptUrl = '';
+        payload.receiptName = '';
+        payload.receiptType = '';
+        payload.receiptStoragePath = '';
+        payload.galleryItemId = '';
+      } else if (existingReceiptUrl) {
+        payload.receiptUrl = existingReceiptUrl;
+        payload.receiptName = existingReceiptName || '';
+        payload.receiptType = existingReceiptType || 'image';
+        payload.galleryItemId = existingGalleryItemId || '';
+      }
+
       let matchingInvItem: any = null;
       if (formData.addToInventory && formData.inventoryItemName) {
         const invQuery = query(collection(db, 'inventory'), where('farmId', '==', farmId), where('itemName', '==', formData.inventoryItemName.trim()));
@@ -300,7 +419,7 @@ export default function Transactions() {
           }
         } else {
           (payload as any).createdAt = Date.now();
-          const newTxRef = doc(collection(db, 'transactions'));
+          const newTxRef = doc(db, 'transactions', txDocId);
           transaction.set(newTxRef, payload);
 
           if (resolvedAccountId && formData.paymentMethod !== 'CREDIT' && newAccDoc && newAccDoc.exists()) {
@@ -340,9 +459,12 @@ export default function Transactions() {
       setEditingOldWasCredit(false);
       setApplyPartyBalance(true);
       setFormData(initialForm);
+      resetReceiptStates();
     } catch (err) {
       console.error("Save failed", err);
       alert(t.error || "Save failed. Please try again.");
+    } finally {
+      setIsSavingTx(false);
     }
   };
 
@@ -388,6 +510,13 @@ export default function Transactions() {
     } else {
       setApplyPartyBalance(tx.paymentMethod !== 'CREDIT');
     }
+    setPendingReceiptFile(null);
+    setPendingReceiptPreview(null);
+    setExistingReceiptUrl(tx.receiptUrl || null);
+    setExistingReceiptName(tx.receiptName || null);
+    setExistingReceiptType(tx.receiptType || null);
+    setExistingGalleryItemId(tx.galleryItemId || null);
+    setReceiptRemoved(false);
     setFormData({
       ...initialForm,
       type: tx.type,
@@ -524,7 +653,7 @@ export default function Transactions() {
               <span className="font-medium">{t.receiptScanner}</span>
             </button>
           </div>
-          <button onClick={() => { setFormData({...initialForm, type: activeTab === 'ALL' ? 'EXPENSE' : activeTab}); setEditingId(null); setIsModalOpen(true); }} className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors shadow-sm">
+          <button onClick={() => { setFormData({...initialForm, type: activeTab === 'ALL' ? 'EXPENSE' : activeTab}); setEditingId(null); resetReceiptStates(); setApplyPartyBalance(true); setIsModalOpen(true); }} className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors shadow-sm">
             <Plus size={18} />
             <span className="font-medium">{t.addTransaction}</span>
           </button>
@@ -658,7 +787,16 @@ export default function Transactions() {
                 </td>
                 <td className={`p-4 text-right font-medium ${tx.type === 'INCOME' ? 'text-emerald-600' : tx.type === 'CAPITAL_INFLOW' ? 'text-indigo-600' : 'text-rose-600'}`}>Rs. {tx.amount.toLocaleString()}</td>
                 <td className="p-4 text-center">
-                  <div className="flex justify-center items-center space-x-2" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex justify-center items-center space-x-1.5" onClick={(e) => e.stopPropagation()}>
+                    {tx.receiptUrl && (
+                      <button
+                        onClick={() => setBillPreviewModal({ url: tx.receiptUrl!, name: tx.receiptName, type: tx.receiptType })}
+                        className="p-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg"
+                        title={t.viewBill || 'View Bill'}
+                      >
+                        <Paperclip size={16} />
+                      </button>
+                    )}
                     <button onClick={() => openEdit(tx)} className="p-1.5 text-stone-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg">
                       <Edit2 size={16} />
                     </button>
@@ -867,6 +1005,128 @@ export default function Transactions() {
                   />
                 </div>
 
+                {batches.length > 0 && (
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">
+                      {t.linkedBatch || (language === 'ne' ? 'सम्बन्धित पशुपन्छी / ब्याच (ऐच्छिक)' : 'Linked Livestock / Batch (Optional)')}
+                    </label>
+                    <select
+                      value={formData.batchId}
+                      onChange={e => setFormData({ ...formData, batchId: e.target.value })}
+                      className="w-full px-4 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+                    >
+                      <option value="">{language === 'ne' ? '-- ब्याच छान्नुहोस् (ऐच्छिक) --' : '-- Select Batch (Optional) --'}</option>
+                      {batches
+                        .filter(b => b.status !== 'COMPLETED' || b.id === formData.batchId)
+                        .map(b => (
+                          <option key={b.id} value={b.id}>
+                            {b.batchName}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Bill / Receipt Attachment Section (Automatically saved to Gallery & Receipts) */}
+                <div className="bg-stone-50 p-4 rounded-xl border border-stone-200 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <span className="text-sm font-semibold text-stone-800 flex items-center gap-1.5">
+                        <Paperclip size={15} className="text-emerald-600" />
+                        <span>{t.attachBillReceipt || (language === 'ne' ? 'बिल / रसिद संलग्न गर्नुहोस् (ऐच्छिक)' : 'Attach Bill / Receipt (Optional)')}</span>
+                      </span>
+                      <p className="text-[11px] text-stone-500 mt-0.5">
+                        {language === 'ne'
+                          ? 'यहाँ अपलोड गरिएको बिल स्वतः "ग्यालरी तथा बिल भर्पाई" मा पनि सुरक्षित हुनेछ।'
+                          : 'Uploaded bills are automatically saved in Gallery & Receipts.'}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <input
+                        type="file"
+                        accept="image/*,application/pdf"
+                        ref={billInputRef}
+                        onChange={handleBillFileChange}
+                        className="hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => billInputRef.current?.click()}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-stone-300 hover:bg-stone-100 text-stone-700 rounded-lg text-xs font-semibold transition-colors"
+                      >
+                        <UploadCloud size={14} />
+                        <span>{t.chooseFromDevice || (language === 'ne' ? 'फाइल छान्नुहोस्' : 'Choose File')}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleCameraBillCapture}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-semibold transition-colors"
+                      >
+                        <CameraIcon size={14} />
+                        <span>{language === 'ne' ? 'फोटो खिच्नुहोस्' : 'Camera'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {(pendingReceiptPreview || (existingReceiptUrl && !receiptRemoved)) && (
+                    <div className="flex items-center justify-between gap-3 p-2.5 bg-white rounded-xl border border-stone-200">
+                      <div className="flex items-center gap-3 min-w-0">
+                        {pendingReceiptPreview === 'PDF_PREVIEW' || (!pendingReceiptPreview && existingReceiptType === 'pdf') ? (
+                          <div className="w-12 h-12 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100">
+                            <FileText size={22} />
+                          </div>
+                        ) : (
+                          <img
+                            src={pendingReceiptPreview || existingReceiptUrl || ''}
+                            alt="Bill preview"
+                            className="w-12 h-12 rounded-lg object-cover border border-stone-200 shrink-0"
+                          />
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-stone-800 truncate">
+                            {pendingReceiptFile?.name || existingReceiptName || (language === 'ne' ? 'संलग्न बिल' : 'Attached Bill')}
+                          </p>
+                          <p className="text-[11px] text-emerald-600 font-medium">
+                            {pendingReceiptFile
+                              ? (language === 'ne' ? 'सेभ गर्दा ग्यालरीमा अपलोड हुनेछ' : 'Ready to save to Gallery & Receipts')
+                              : (language === 'ne' ? 'पहिले नै संलग्न बिल' : 'Already attached')}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {(existingReceiptUrl || (pendingReceiptPreview && pendingReceiptPreview !== 'PDF_PREVIEW')) && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setBillPreviewModal({
+                                url: (pendingReceiptPreview && pendingReceiptPreview !== 'PDF_PREVIEW' ? pendingReceiptPreview : existingReceiptUrl) || '',
+                                name: pendingReceiptFile?.name || existingReceiptName || 'Bill',
+                                type: pendingReceiptPreview === 'PDF_PREVIEW' ? 'pdf' : (existingReceiptType || 'image'),
+                              })
+                            }
+                            className="p-1.5 text-stone-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg"
+                            title={t.viewBill || 'View Bill'}
+                          >
+                            <Eye size={15} />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPendingReceiptFile(null);
+                            setPendingReceiptPreview(null);
+                            setReceiptRemoved(true);
+                          }}
+                          className="p-1.5 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg"
+                          title={t.removeBill || 'Remove Bill'}
+                        >
+                          <X size={15} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {formData.type === 'EXPENSE' && (
                   <div className="bg-stone-50 p-4 rounded-xl border border-stone-200 mt-4 space-y-4">
                     <label className="flex items-center space-x-2 cursor-pointer">
@@ -939,9 +1199,9 @@ export default function Transactions() {
                   <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-2.5 text-stone-600 font-medium hover:bg-stone-100 rounded-xl transition-colors">
                     {t.cancel}
                   </button>
-                  <button type="submit" className="flex items-center space-x-2 px-5 py-2.5 bg-emerald-600 text-white font-medium hover:bg-emerald-700 rounded-xl transition-colors">
+                  <button type="submit" disabled={isSavingTx} className="flex items-center space-x-2 px-5 py-2.5 bg-emerald-600 text-white font-medium hover:bg-emerald-700 disabled:opacity-60 rounded-xl transition-colors">
                     <Save size={18} />
-                    <span>{t.saveEntry}</span>
+                    <span>{isSavingTx ? (t.saving || 'Saving...') : t.saveEntry}</span>
                   </button>
                 </div>
               </form>
@@ -1006,15 +1266,66 @@ export default function Transactions() {
                   </div>
                 </div>
               )}
+
+              {previewTx.receiptUrl && (
+                <div className="pt-4 border-t border-stone-100">
+                  <p className="text-stone-500 text-sm mb-2">{t.billAttached || 'Attached Bill / Receipt'}</p>
+                  <div
+                    onClick={() => setBillPreviewModal({ url: previewTx.receiptUrl!, name: previewTx.receiptName, type: previewTx.receiptType })}
+                    className="rounded-xl border border-stone-200 overflow-hidden bg-stone-50 cursor-pointer hover:border-emerald-400 transition-colors"
+                  >
+                    {previewTx.receiptType === 'pdf' ? (
+                      <div className="p-4 flex items-center justify-between text-sm text-rose-700 font-medium">
+                        <span className="flex items-center gap-2"><FileText size={18} /> {previewTx.receiptName || 'PDF Bill'}</span>
+                        <span className="text-xs underline">{t.viewBill || 'View'}</span>
+                      </div>
+                    ) : (
+                      <img src={previewTx.receiptUrl} alt={previewTx.receiptName || 'Receipt'} className="w-full max-h-48 object-contain bg-stone-100" />
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
-            <div className="p-4 border-t border-stone-100 bg-stone-50 flex justify-end gap-3">
+            <div className="p-4 border-t border-stone-100 bg-stone-50 flex justify-end gap-3 shrink-0">
               <button onClick={() => { openEdit(previewTx); setPreviewTx(null); }} className="px-4 py-2 text-blue-700 font-medium hover:bg-blue-100 rounded-xl transition-colors">
                 {t.edit || 'Edit'}
               </button>
               <button onClick={() => setPreviewTx(null)} className="px-4 py-2 bg-stone-200 text-stone-800 font-medium hover:bg-stone-300 rounded-xl transition-colors">
                 {t.cancel || 'Close'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bill Quick Lightbox Modal */}
+      {billPreviewModal && (
+        <div
+          className="fixed inset-0 bg-stone-950/85 backdrop-blur-xs flex flex-col items-center justify-center p-4 z-[80]"
+          onClick={() => setBillPreviewModal(null)}
+        >
+          <div
+            className="bg-white rounded-2xl w-full max-w-3xl max-h-[90dvh] flex flex-col overflow-hidden shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-stone-200 bg-stone-50">
+              <h3 className="font-bold text-stone-800 text-sm truncate">
+                {billPreviewModal.name || t.billAttached || 'Bill / Receipt'}
+              </h3>
+              <button
+                onClick={() => setBillPreviewModal(null)}
+                className="p-1.5 rounded-lg text-stone-500 hover:bg-stone-200"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-4 bg-stone-100 flex items-center justify-center">
+              {billPreviewModal.type === 'pdf' ? (
+                <iframe src={billPreviewModal.url} title="Bill PDF" className="w-full h-[70dvh] rounded-lg bg-white" />
+              ) : (
+                <img src={billPreviewModal.url} alt="Bill Preview" className="max-w-full max-h-[75dvh] object-contain rounded-lg shadow-sm" />
+              )}
             </div>
           </div>
         </div>

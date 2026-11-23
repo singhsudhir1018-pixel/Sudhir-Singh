@@ -3,13 +3,13 @@ import { useAppStore } from '../store';
 import { translations } from '../lib/translations';
 import { 
   TrendingUp, TrendingDown, Wallet, AlertTriangle, ArrowRight, 
-  Map as MapIcon, UserCircle, CheckSquare, Briefcase, Sparkles, Activity
+  Map as MapIcon, UserCircle, CheckSquare, Briefcase, Sparkles, Activity, Bird
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import CashBankBalanceCard from '../components/CashBankBalanceCard';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { Transaction, InventoryItem, Lease, Employee, Task, Partner } from '../types';
+import { Transaction, InventoryItem, Lease, Employee, Task, Partner, Batch } from '../types';
 import { motion } from 'framer-motion';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -29,6 +29,7 @@ export default function Dashboard() {
     activeEmployees: 0,
     pendingTasks: 0,
     totalInvestment: 0,
+    liveLivestock: 0,
   });
 
   const [monthlyData, setMonthlyData] = useState<any[]>([]);
@@ -39,7 +40,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (!farmId) return;
 
-    let totalInc = 0; let totalExp = 0; let lowStock = 0; let leases = 0; let employees = 0; let tasks = 0; let investment = 0;
+    let totalInc = 0; let totalExp = 0; let lowStock = 0; let leases = 0; let employees = 0; let tasks = 0; let investment = 0; let liveLivestock = 0;
 
     const unsubTxs = onSnapshot(query(collection(db, 'transactions'), where('farmId', '==', farmId)), snap => {
       totalInc = 0; totalExp = 0;
@@ -105,6 +106,18 @@ export default function Dashboard() {
       updateMetrics();
     });
 
+    const unsubBatches = onSnapshot(query(collection(db, 'batches'), where('farmId', '==', farmId)), snap => {
+      liveLivestock = 0;
+      snap.forEach(d => {
+        const b = d.data() as Batch;
+        if (b.status !== 'COMPLETED' && (b.type === 'LIVESTOCK' || b.type !== 'CROP')) {
+          const alive = Math.max(0, (Number(b.initialCount) || 0) + (Number(b.addedCount) || 0) - (Number(b.deadCount) || 0) - (Number(b.soldCount) || 0));
+          liveLivestock += alive;
+        }
+      });
+      updateMetrics();
+    });
+
     function updateMetrics() {
       setMetrics({
         totalIncome: totalInc,
@@ -115,10 +128,11 @@ export default function Dashboard() {
         activeEmployees: employees,
         pendingTasks: tasks,
         totalInvestment: investment,
+        liveLivestock,
       });
     }
 
-    return () => { unsubTxs(); unsubInv(); unsubLeases(); unsubEmp(); unsubTasks(); unsubPartners(); };
+    return () => { unsubTxs(); unsubInv(); unsubLeases(); unsubEmp(); unsubTasks(); unsubPartners(); unsubBatches(); };
   }, [farmId]);
 
   useEffect(() => {
@@ -297,8 +311,9 @@ export default function Dashboard() {
       </div>
 
       <h3 className="text-lg font-bold text-stone-800 mt-8 mb-2 tracking-tight">Operational Overview</h3>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {[
+          { label: t.currentAlive || 'Live Livestock', value: metrics.liveLivestock.toLocaleString(), icon: Bird, color: 'text-emerald-600', bg: 'bg-emerald-50', link: '/livestock' },
           { label: t.activeLeases || 'Active Leases', value: metrics.activeLeases, icon: MapIcon, color: 'text-indigo-600', bg: 'bg-indigo-50' },
           { label: t.activeEmployees || 'Active Employees', value: metrics.activeEmployees, icon: UserCircle, color: 'text-teal-600', bg: 'bg-teal-50' },
           { label: t.taskSummary || 'Pending Tasks', value: metrics.pendingTasks, icon: CheckSquare, color: 'text-sky-600', bg: 'bg-sky-50' },
@@ -316,8 +331,8 @@ export default function Dashboard() {
               <div className="text-sm font-semibold text-stone-500 mb-1">{metric.label}</div>
               <div className="text-2xl font-bold text-stone-800">{metric.value}</div>
               {metric.link && (
-                <Link to={metric.link} className="text-xs font-semibold text-orange-600 hover:text-orange-700 mt-2 flex items-center">
-                  View Details <ArrowRight size={12} className="ml-1" />
+                <Link to={metric.link} className={`text-xs font-semibold ${metric.color} hover:opacity-80 mt-2 flex items-center`}>
+                  {language === 'ne' ? 'विवरण हेर्नुहोस्' : 'View Details'} <ArrowRight size={12} className="ml-1" />
                 </Link>
               )}
             </div>

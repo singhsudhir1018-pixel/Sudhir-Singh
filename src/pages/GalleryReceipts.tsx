@@ -4,7 +4,7 @@ import { translations } from '../lib/translations';
 import { GalleryItem, Party } from '../types';
 import { db, storage } from '../lib/firebase';
 import { collection, onSnapshot, query, where, addDoc, deleteDoc, doc, getDocs } from 'firebase/firestore';
-import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
+import { ref, deleteObject } from 'firebase/storage';
 import { 
   Plus, Search, Filter, Calendar, FileText, Image as ImageIcon, Download, 
   Trash2, ZoomIn, ZoomOut, RotateCcw, X, UploadCloud, Camera as CameraIcon, 
@@ -13,6 +13,7 @@ import {
 import NepaliDate from 'nepali-datetime';
 import NepaliDatePicker from '../components/NepaliDatePicker';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
+import { uploadReceiptFile } from '../lib/receiptUpload';
 
 export default function GalleryReceipts() {
   const { language, farmId } = useAppStore();
@@ -177,48 +178,10 @@ export default function GalleryReceipts() {
     }
   };
 
-  // Upload File to Firebase Storage with Fallback
+  // Upload File to Firebase Storage with Compressed Fallback
   const uploadToStorage = async (file: File): Promise<{ url: string; storagePath?: string }> => {
-    return new Promise(async (resolve) => {
-      try {
-        const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-        const path = `gallery_receipts/${farmId}/${Date.now()}_${cleanName}`;
-        const storageRef = ref(storage, path);
-        const uploadTask = uploadBytesResumable(storageRef, file);
-
-        uploadTask.on(
-          'state_changed',
-          (snap) => {
-            const p = Math.round((snap.bytesTransferred / snap.totalBytes) * 100);
-            setUploadProgress(p);
-          },
-          (err) => {
-            console.warn("Storage upload failed, using local DataURL fallback:", err);
-            // Fallback to Base64 Data URL
-            const reader = new FileReader();
-            reader.onloadend = () => {
-              resolve({ url: reader.result as string });
-            };
-            reader.readAsDataURL(file);
-          },
-          async () => {
-            try {
-              const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
-              resolve({ url: downloadUrl, storagePath: path });
-            } catch (err) {
-              const reader = new FileReader();
-              reader.onloadend = () => resolve({ url: reader.result as string });
-              reader.readAsDataURL(file);
-            }
-          }
-        );
-      } catch (err) {
-        console.warn("Direct storage fallback triggered:", err);
-        const reader = new FileReader();
-        reader.onloadend = () => resolve({ url: reader.result as string });
-        reader.readAsDataURL(file);
-      }
-    });
+    const res = await uploadReceiptFile(farmId || 'default', file, (p) => setUploadProgress(p));
+    return { url: res.url, storagePath: res.storagePath || undefined };
   };
 
   // Submit Upload Form
@@ -554,6 +517,11 @@ export default function GalleryReceipts() {
                       <p className="text-xs text-stone-500 flex items-center space-x-1 mt-0.5 truncate">
                         <User size={11} className="text-stone-400 shrink-0" />
                         <span className="truncate">{item.vendorName}</span>
+                      </p>
+                    )}
+                    {item.transactionId && (
+                      <p className="text-[11px] text-emerald-700 font-medium mt-0.5 truncate">
+                        · {t.fromTransactions || 'From Transactions'}
                       </p>
                     )}
                   </div>

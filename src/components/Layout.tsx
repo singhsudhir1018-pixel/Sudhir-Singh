@@ -10,7 +10,7 @@ import {
   LayoutDashboard, Receipt, Package, Settings as SettingsIcon, LogOut, 
   Languages, Users, Map as MapIcon, UserCircle, CheckSquare, PieChart, 
   Landmark, ChevronDown, Menu, X, Plus, Search, Command, Activity, Sun, Moon,
-  Images
+  Images, Bird
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -79,6 +79,7 @@ export default function Layout() {
     { path: '/transactions', label: t.transactions, icon: Receipt },
     { path: '/accounts', label: t.cashAndBank || 'Cash & Bank', icon: Landmark },
     { path: '/inventory', label: t.inventory, icon: Package },
+    { path: '/livestock', label: t.livestockBatches || 'Livestock & Batches', icon: Bird },
     { path: '/leases', label: t.leases, icon: MapIcon },
     { path: '/employees', label: t.employees, icon: UserCircle },
     { path: '/parties', label: t.parties, icon: Users },
@@ -92,7 +93,7 @@ export default function Layout() {
   );
 
   return (
-    <div className="min-h-screen bg-stone-50 text-stone-900 flex font-sans selection:bg-emerald-200">
+    <div className="min-h-screen bg-stone-50 text-stone-900 flex font-sans selection:bg-emerald-200 print:block print:min-h-0 print:bg-white">
       {/* Offline Sync Bar */}
       <AnimatePresence>
         {!isOnline && (
@@ -233,7 +234,7 @@ export default function Layout() {
       </AnimatePresence>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col h-[100dvh] overflow-hidden relative w-full print:h-auto print:overflow-visible">
+      <main className="flex-1 flex flex-col h-[100dvh] overflow-hidden relative w-full print:block print:h-auto print:overflow-visible">
         {/* Header */}
         <header className="bg-white/80 backdrop-blur-xl border-b border-stone-200/50 h-16 flex items-center justify-between px-4 lg:px-8 shrink-0 relative z-20 print:hidden">
           <div className="flex items-center space-x-3">
@@ -348,6 +349,10 @@ export default function Layout() {
               <button onClick={() => { setIsFabOpen(false); navigate('/tasks'); }} className="flex items-center space-x-3 bg-white px-4 py-2 rounded-full shadow-lg border border-stone-100">
                 <span className="font-semibold text-stone-700 text-sm">New Task</span>
                 <div className="bg-emerald-100 text-emerald-600 p-2 rounded-full"><CheckSquare size={16} /></div>
+              </button>
+              <button onClick={() => { setIsFabOpen(false); navigate('/livestock'); }} className="flex items-center space-x-3 bg-white px-4 py-2 rounded-full shadow-lg border border-stone-100">
+                <span className="font-semibold text-stone-700 text-sm">{t.livestockBatches || 'Livestock'}</span>
+                <div className="bg-emerald-100 text-emerald-600 p-2 rounded-full"><Bird size={16} /></div>
               </button>
               <button onClick={() => { setIsFabOpen(false); navigate('/inventory'); }} className="flex items-center space-x-3 bg-white px-4 py-2 rounded-full shadow-lg border border-stone-100">
                 <span className="font-semibold text-stone-700 text-sm">Update Stock</span>

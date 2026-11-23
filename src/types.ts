@@ -20,6 +20,11 @@ export interface Transaction {
   dateBS: string;
   notes?: string;
   partyBalanceEffect?: 'ADD_DUE' | 'REDUCE_DUE' | 'NONE';
+  receiptUrl?: string;
+  receiptName?: string;
+  receiptType?: 'image' | 'pdf' | string;
+  receiptStoragePath?: string;
+  galleryItemId?: string;
   createdAt?: number;
   createdBy?: string;
 }
@@ -71,15 +76,53 @@ export interface Partner {
   dividendPayable: number;
 }
 
+export type LivestockSpecies =
+  | 'CHICKEN'
+  | 'DUCK'
+  | 'GOAT'
+  | 'FISH'
+  | 'PIG'
+  | 'CATTLE'
+  | 'OTHER';
+
 export interface Batch {
   id: string;
   farmId: string;
   batchName: string;
   type: 'CROP' | 'LIVESTOCK';
+  species?: LivestockSpecies;
+  speciesLabel?: string;
+  supplierId?: string;
+  supplierName?: string;
   startDateBS: string;
+  initialCount?: number;
+  addedCount?: number;
+  deadCount?: number;
+  soldCount?: number;
+  unitPrice?: number;
+  purchaseTotalCost?: number;
+  notes?: string;
   status: 'ACTIVE' | 'COMPLETED';
   totalExpense: number;
   totalIncome: number;
+  createdAt?: number;
+}
+
+export interface LivestockLog {
+  id: string;
+  farmId: string;
+  batchId: string;
+  batchName: string;
+  species?: LivestockSpecies;
+  eventType: 'INITIAL' | 'MORTALITY' | 'ADDITION' | 'SALE';
+  quantity: number;
+  dateBS: string;
+  partyId?: string;
+  partyName?: string;
+  amount?: number;
+  notes?: string;
+  transactionId?: string;
+  createdAt: number;
 }
 
 export interface Lease {
@@ -146,6 +189,7 @@ export interface GalleryItem {
   fileSize?: number;
   storagePath?: string;
   notes?: string;
+  transactionId?: string;
   createdAt: number;
   createdBy?: string;
 }

@@ -86,7 +86,11 @@ export default function Parties() {
 
   const filteredParties = parties.filter(p => 
     (filterType === 'ALL' || p.type === filterType) &&
-    (p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.phone.includes(searchQuery))
+    (
+      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.phone.includes(searchQuery) ||
+      (p.address || '').toLowerCase().includes(searchQuery.toLowerCase())
+    )
   );
 
   const handleSaveParty = async (e: React.FormEvent) => {
@@ -267,7 +271,7 @@ export default function Parties() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" size={18} />
                 <input 
                   type="text" 
-                  placeholder="Search name or phone..." 
+                  placeholder={language === 'ne' ? 'नाम, फोन वा ठेगानाबाट खोज्नुहोस्...' : 'Search name, phone or address...'} 
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 border border-stone-200 rounded-xl focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500"
@@ -490,6 +494,16 @@ export default function Parties() {
               <div>
                 <label className="block text-sm font-medium text-stone-700 mb-1">{t.party} {t.name}</label>
                 <input type="text" required value={partyForm.name} onChange={e => setPartyForm({...partyForm, name: e.target.value})} className="w-full px-4 py-2 border border-stone-200 rounded-xl focus:ring-2 focus:ring-green-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-stone-700 mb-1">{t.address}</label>
+                <input
+                  type="text"
+                  value={partyForm.address}
+                  onChange={e => setPartyForm({...partyForm, address: e.target.value})}
+                  placeholder={language === 'ne' ? 'जस्तै: विराटनगर-५, मोरङ' : 'e.g., Biratnagar-5, Morang'}
+                  className="w-full px-4 py-2 border border-stone-200 rounded-xl focus:ring-2 focus:ring-green-500"
+                />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>

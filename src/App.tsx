@@ -18,6 +18,7 @@ import Leases from './pages/Leases';
 import Finance from './pages/Finance';
 import Accounts from './pages/Accounts';
 import GalleryReceipts from './pages/GalleryReceipts';
+import LivestockBatches from './pages/LivestockBatches';
 import Login from './pages/Login';
 
 export default function App() {
@@ -99,6 +100,7 @@ export default function App() {
             <Route path="/transactions" element={<Transactions />} />
             <Route path="/accounts" element={<Accounts />} />
             <Route path="/inventory" element={<Inventory />} />
+            <Route path="/livestock" element={<LivestockBatches />} />
             <Route path="/leases" element={<Leases />} />
             <Route path="/employees" element={<Employees />} />
             <Route path="/parties" element={<Parties />} />
